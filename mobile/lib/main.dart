@@ -10,6 +10,14 @@ class ISHIApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const HomePage();
+    return MaterialApp(
+      title: 'ISHI App',
+      theme: ThemeData(
+        primarySwatch: Colors.teal,
+        scaffoldBackgroundColor: Colors.white,
+      ),
+      home: const HomePage(),
+      debugShowCheckedModeBanner: false,
+    );
   }
 }

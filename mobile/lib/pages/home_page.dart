@@ -1,12 +1,7 @@
-import 'dart:convert';
-import 'dart:html' as html;
-import 'dart:typed_data';
-import 'package:flutter/foundation.dart';
+import 'camera_page.dart';
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:http/http.dart' as http;
-import 'package:http_parser/http_parser.dart';
-import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -16,214 +11,143 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  Uint8List? _imageBytes;
-  String? _result;
-  bool _loading = false;
-  bool _darkMode = false;
-  List<Map<String, String>> _history = [];
+  String name = 'Guest';
+  String language = 'English';
 
-  Future<void> _pickImage() async {
-    final result = await FilePicker.platform.pickFiles(type: FileType.image);
-    if (result != null && result.files.single.bytes != null) {
-      setState(() {
-        _imageBytes = result.files.single.bytes!;
-        _result = null;
-      });
-    }
+  final List<Map<String, String>> events = [
+    {'title': 'Anemia Camp – Aug 5', 'date': '2025-08-05'},
+    {'title': 'Free Screening – Sep 10', 'date': '2025-09-10'},
+  ];
+
+  final List<Map<String, String>> blogs = [
+    {'title': 'ISHI at Rutgers', 'summary': 'Our outreach team visited...'},
+    {'title': 'Summer Recap', 'summary': 'We helped 1200 patients...'},
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProfile();
   }
 
-  Future<void> _captureFromCamera() async {
-    final html.FileUploadInputElement uploadInput = html.FileUploadInputElement();
-    uploadInput.accept = 'image/*';
-    uploadInput.click();
-
-    await uploadInput.onChange.first;
-
-    if (uploadInput.files!.isNotEmpty) {
-      final file = uploadInput.files!.first;
-      final reader = html.FileReader();
-      reader.readAsArrayBuffer(file);
-      await reader.onLoad.first;
-      setState(() {
-        _imageBytes = reader.result as Uint8List;
-        _result = null;
-      });
-    }
+  Future<void> _loadProfile() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      name = prefs.getString('name') ?? 'Guest';
+      language = prefs.getString('language') ?? 'English';
+    });
   }
 
-  Future<void> _submitImage() async {
-    if (_imageBytes == null) return;
-    setState(() => _loading = true);
-
-    try {
-      final uri = Uri.parse(
-          'https://turbo-spoon-7vxrgr7gjqxv3xp5r-8000.app.github.dev/predict/anemia');
-
-      final request = http.MultipartRequest('POST', uri)
-        ..files.add(http.MultipartFile.fromBytes(
-          'file',
-          _imageBytes!,
-          filename: 'upload.jpg',
-          contentType: MediaType('image', 'jpeg'),
-        ));
-
-      final response = await request.send();
-      final respStr = await response.stream.bytesToString();
-
-      if (response.statusCode == 200) {
-        final json = jsonDecode(respStr);
-        final resultText = json['anemic'] ? 'Anemic' : 'Not Anemic';
-
-        final timestamp = DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now());
-        final entry = {'timestamp': timestamp, 'result': resultText};
-
-        setState(() {
-          _result = resultText;
-          _history.insert(0, entry);
-        });
-
-        html.window.localStorage['ishi_test_history'] = jsonEncode(_history);
-      } else {
-        setState(() => _result = 'Error: ${response.statusCode}');
-      }
-    } catch (e) {
-      setState(() => _result = 'Network error: $e');
-    } finally {
-      setState(() => _loading = false);
-    }
-  }
-
-@override
-void initState() {
-  super.initState();
-  final saved = html.window.localStorage['ishi_test_history'];
-  if (saved != null) {
-    final decoded = jsonDecode(saved);
-    _history = List<Map<String, String>>.from(
-      (decoded as List).map((e) => Map<String, String>.from(e)),
+  Widget _quickActionTile(String label, IconData icon, VoidCallback onTap) {
+    return ElevatedButton(
+      style: ElevatedButton.styleFrom(padding: const EdgeInsets.all(12)),
+      onPressed: onTap,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 30),
+          const SizedBox(height: 10),
+          Text(label, textAlign: TextAlign.center),
+        ],
+      ),
     );
   }
-}
+
+  Widget _eventCard(String title, String date) {
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.event),
+        title: Text(title),
+        subtitle: Text(date),
+      ),
+    );
+  }
+
+  Widget _newsCard(String title, String summary) {
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.article),
+        title: Text(title),
+        subtitle: Text(summary),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final theme = _darkMode ? ThemeData.dark() : ThemeData.light();
-    return MaterialApp(
-      theme: theme,
-      debugShowCheckedModeBanner: false,
-      home: Scaffold(
-        appBar: AppBar(
-          title: const Text('ISHI – Anemia Check (Web)'),
-          actions: [
-            IconButton(
-              icon: Icon(_darkMode ? Icons.wb_sunny : Icons.nights_stay),
-              onPressed: () => setState(() => _darkMode = !_darkMode),
-              tooltip: 'Toggle Dark Mode',
-            )
-          ],
-        ),
-        body: SingleChildScrollView(
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                children: [
-                  const Text(
-                    'About Anemia',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                  ),
-                  const SizedBox(height: 8),
-                  const Card(
-                    child: Padding(
-                      padding: EdgeInsets.all(12),
-                      child: Text(
-                        'Anemia is a condition where you lack enough healthy red blood cells to carry adequate oxygen to your body\'s tissues. Detecting it early can help prevent fatigue, weakness, and more serious complications.',
-                        style: TextStyle(fontSize: 14),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  if (_imageBytes != null) ...[
-                    const Text('Selected Image:',
-                        style: TextStyle(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 10),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: Image.memory(_imageBytes!, height: 200),
-                    ),
-                    const SizedBox(height: 20),
-                  ],
-                  if (_loading)
-                    const CircularProgressIndicator()
-                  else if (_result != null)
-                    Card(
-                      color: _result == 'Anemic'
-                          ? Colors.red[100]
-                          : Colors.green[100],
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Text(
-                          _result!,
-                          style: TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            color: _result == 'Anemic'
-                                ? Colors.red[800]
-                                : Colors.green[800],
-                          ),
-                        ),
-                      ),
-                    ),
-                  const SizedBox(height: 20),
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    alignment: WrapAlignment.center,
-                    children: [
-                      ElevatedButton(
-                        onPressed: _pickImage,
-                        child: const Text('Upload Eyelid Image'),
-                      ),
-                      ElevatedButton(
-                        onPressed: kIsWeb ? _captureFromCamera : null,
-                        child: const Text('Capture from Webcam'),
-                      ),
-                      ElevatedButton(
-                        onPressed:
-                            _imageBytes == null || _loading ? null : _submitImage,
-                        child: const Text('Check for Anemia'),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 30),
-                  if (_history.isNotEmpty) ...[
-                    const Divider(),
-                    const Text('Test History',
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 16)),
-                    const SizedBox(height: 10),
-                    ..._history
-                        .map((entry) => ListTile(
-                              leading: Icon(
-                                entry['result'] == 'Anemic'
-                                    ? Icons.warning
-                                    : Icons.check_circle,
-                                color: entry['result'] == 'Anemic'
-                                    ? Colors.red
-                                    : Colors.green,
-                              ),
-                              title: Text(entry['result']!),
-                              subtitle: Text(entry['timestamp']!),
-                            ))
-                        .toList(),
-                  ]
-                ],
+    return Scaffold(
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () async {
+          const url = 'https://www.yourdonationpage.com';
+          if (await canLaunchUrl(Uri.parse(url))) {
+            await launchUrl(Uri.parse(url));
+          }
+        },
+        icon: const Icon(Icons.favorite),
+        label: const Text('Donate'),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Column(
+            children: [
+              Image.asset('assets/logo.png', height: 100),
+              const SizedBox(height: 12),
+              const Text(
+                'Iron Strong Health Initiative, Inc',
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
               ),
-            ),
+              const SizedBox(height: 24),
+            ],
           ),
-        ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Hello, $name!',
+                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+              ),
+              const Icon(Icons.settings),
+            ],
+          ),
+          const SizedBox(height: 20),
+
+          const Text('Quick Actions', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 10),
+          GridView.count(
+            crossAxisCount: 2,
+            shrinkWrap: true,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+            physics: const NeverScrollableScrollPhysics(),
+            children: [
+              _quickActionTile('Anemia Check', Icons.camera_alt, () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const CameraPage()),
+                );
+              }),
+              _quickActionTile('History', Icons.history, () {}),
+              _quickActionTile('Symptom Checker', Icons.health_and_safety, () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const CameraPage()),
+                );
+              }),
+              _quickActionTile('Saved Results', Icons.save, () {}),
+            ],
+          ),
+
+          const SizedBox(height: 30),
+          const Text('Upcoming Events', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          ...events.map((e) => _eventCard(e['title']!, e['date']!)),
+
+          const SizedBox(height: 20),
+          const Text('Latest News & Blogs', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          ...blogs.map((b) => _newsCard(b['title']!, b['summary']!)),
+        ],
       ),
     );
   }
