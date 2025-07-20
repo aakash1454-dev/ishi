@@ -1,0 +1,24 @@
+name: ishi_mobile
+description: ISHI Flutter App for Anemia Detection
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  file_picker: ^6.1.1
+  http: ^1.2.1
+  http_parser: ^4.0.2
+  cupertino_icons: ^1.0.8
+  intl: ^0.18.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.0
+
+flutter:
+  uses-material-design: true
