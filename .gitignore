@@ -1,1 +1,41 @@
+# Flutter-related
 flutter/
+**/build/
+.dart_tool/
+.packages
+.pub-cache/
+.idea/
+*.iml
+
+# Python-related
+__pycache__/
+*.py[cod]
+*.egg-info/
+env/
+venv/
+*.log
+
+# Model files, datasets, outputs
+*.pth
+*.pt
+*.h5
+*.onnx
+*.ckpt
+*.log
+*.csv
+*.npz
+*.npy
+*.pkl
+datasets/
+models/
+training/__pycache__/
+training/*.log
+scripts/__pycache__/
+
+# VSCode
+.vscode/
+
+# System
+.DS_Store
+Thumbs.db
+
