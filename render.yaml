@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: ishi-backend
+    env: python
+    rootDir: api
+    buildCommand: |
+      pip install -r requirements.txt
+      # Install CPU-only PyTorch wheels (Render free tier has no GPU)
+      pip install --index-url https://download.pytorch.org/whl/cpu torch torchvision torchaudio
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.8
+      - key: WEB_CONCURRENCY
+        value: 1
