@@ -1,42 +1,32 @@
-# Flutter-related
-flutter/
-**/build/
-.dart_tool/
-.packages
-.pub-cache/
-.idea/
-*.iml
-
-# Python-related
+# Python
 __pycache__/
-*.py[cod]
-*.egg-info/
-env/
-venv/
-*.log
+*.pyc
+*.pyo
 
-# Model files, datasets, outputs
+# Checkpoints & large models (do NOT commit)
 *.pth
 *.pt
-*.h5
-*.onnx
-*.ckpt
+
+# Datasets (keep processed labels, ignore raw/heavy)
+datasets/**/raw/
+datasets/**/tmp/
+datasets/**/cache/
+# keep labels.csv if it exists
+!datasets/**/labels.csv
+
+# Runs & intermediates
+runs/
+!runs/eval/
+!runs/eval/*.csv
+!runs/eval/*.png
+!runs/eval/error_sets/*.csv
+
+# Notebooks & local env
+.ipynb_checkpoints/
+.env
+.venv/
 *.log
-*.csv
-*.npz
-*.npy
-*.pkl
-datasets/
-models/
-training/__pycache__/
-training/*.log
-scripts/__pycache__/
 
-# VSCode
+# IDE / OS junk
 .vscode/
-
-# System
 .DS_Store
-Thumbs.db
-
-*.deb

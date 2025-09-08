@@ -1,0 +1,5 @@
+country,view,n,tp,tn,fp,fn,acc,prec,rec,f1
+India,forniceal_palpebral,63,0,32,0,31,0.5079365079365079,0,0.0,0
+India,palpebral,63,0,32,0,31,0.5079365079365079,0,0.0,0
+Italy,forniceal_palpebral,87,0,44,0,43,0.5057471264367817,0,0.0,0
+Italy,palpebral,92,0,47,0,45,0.5108695652173914,0,0.0,0

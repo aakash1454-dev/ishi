@@ -6,6 +6,12 @@ from torchvision import transforms
 from PIL import Image
 import io
 import os
+from api.utils.config import get_anemia_threshold
+
+def classify_prob_to_label(prob: float) -> tuple[str, bool]:
+    thr = get_anemia_threshold()          # ← read fresh
+    is_anemic = prob >= thr
+    return ("Anemic" if is_anemic else "Not Anemic", is_anemic)
 
 # Constants
 MODEL_PATH = os.path.join("api", "models", "anemia_cnn.pth")
