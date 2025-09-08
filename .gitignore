@@ -1,32 +1,38 @@
-# Python
+# --- Python / FastAPI ---
 __pycache__/
 *.pyc
 *.pyo
+*.pyd
+*.log
+.venv/
+.env
+.env.*
+.cache/
+dist/
+build/
 
-# Checkpoints & large models (do NOT commit)
+# --- Model artifacts / datasets (do NOT commit) ---
 *.pth
 *.pt
-
-# Datasets (keep processed labels, ignore raw/heavy)
-datasets/**/raw/
-datasets/**/tmp/
-datasets/**/cache/
-# keep labels.csv if it exists
-!datasets/**/labels.csv
-
-# Runs & intermediates
+*ckpt*
 runs/
-!runs/eval/
-!runs/eval/*.csv
-!runs/eval/*.png
-!runs/eval/error_sets/*.csv
+checkpoints/
+datasets/
+data/
+# if you keep tiny samples for demos, whitelist a small folder and add files there:
+#!samples/
 
-# Notebooks & local env
-.ipynb_checkpoints/
-.env
-.venv/
-*.log
-
-# IDE / OS junk
-.vscode/
+# --- OS/Editor ---
 .DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# --- Flutter (mobile/) ---
+mobile/.dart_tool/
+mobile/.packages
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
+mobile/build/
+mobile/ios/Pods/
+mobile/pubspec.lock
