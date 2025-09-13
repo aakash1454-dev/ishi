@@ -1,7 +1,7 @@
 # api/main.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from api.routes import anemia
+from api.routes import anemia, news
 
 app = FastAPI()
 
@@ -15,6 +15,7 @@ app.add_middleware(
 )
 
 app.include_router(anemia.router)
+app.include_router(news.router) 
 
 @app.get("/health")
 def health():
