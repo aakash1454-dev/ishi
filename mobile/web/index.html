@@ -31,6 +31,15 @@
 
   <title>mobile</title>
   <link rel="manifest" href="manifest.json">
+<!-- Google Identity Services (required for google_sign_in on web) -->
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+
+<!-- Optional but helpful: set client id here too -->
+<meta
+  name="google-signin-client_id"
+  content="YOUR_WEB_CLIENT_ID.apps.googleusercontent.com"
+/>
+
 </head>
 <body>
   <script src="flutter_bootstrap.js" async></script>

@@ -45,5 +45,21 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+
+	<!-- ⬇️ Add these two Google Sign-In entries -->
+	<key>GIDClientID</key>
+	<string>YOUR_IOS_CLIENT_ID.apps.googleusercontent.com</string>
+
+	<key>CFBundleURLTypes</key>
+	<array>
+	  <dict>
+	    <key>CFBundleURLSchemes</key>
+	    <array>
+	      <!-- reversed client id: com.googleusercontent.apps.YOUR_IOS_CLIENT_ID -->
+	      <string>com.googleusercontent.apps.YOUR_IOS_CLIENT_ID</string>
+	    </array>
+	  </dict>
+	</array>
+	<!-- ⬆️ End Google Sign-In -->
 </dict>
 </plist>

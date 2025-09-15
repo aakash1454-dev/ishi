@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'pages/home_page.dart';
 import 'pages/camera_page.dart'; // ISHI-AI Check
+import 'pages/profile_page.dart';
 import 'widgets/floating_nav.dart';
+import 'pages/about_page.dart';
+
 
 void main() => runApp(const ISHIApp());
 
@@ -20,7 +23,11 @@ class _ISHIAppState extends State<ISHIApp> {
       title: 'ISHI App',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(useMaterial3: true, colorSchemeSeed: const Color(0xFF2B5CFF)),
-      darkTheme: ThemeData(useMaterial3: true, colorSchemeSeed: const Color(0xFF2B5CFF), brightness: Brightness.dark),
+      darkTheme: ThemeData(
+        useMaterial3: true,
+        colorSchemeSeed: const Color(0xFF2B5CFF),
+        brightness: Brightness.dark,
+      ),
       home: Scaffold(
         body: SafeArea(
           child: IndexedStack(
@@ -29,8 +36,8 @@ class _ISHIAppState extends State<ISHIApp> {
               HomePage(),
               CameraPage(),          // ISHI-AI Check
               _EventsPage(),
-              _ProfilePage(),
-              _AboutPage(),
+              ProfilePage(),         // ← real Profile page (Google OAuth + local storage)
+              AboutPage(),
               _DonatePage(),
             ],
           ),
@@ -50,16 +57,7 @@ class _EventsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => const Center(child: Text('Events coming soon'));
 }
-class _ProfilePage extends StatelessWidget {
-  const _ProfilePage();
-  @override
-  Widget build(BuildContext context) => const Center(child: Text('Profile coming soon'));
-}
-class _AboutPage extends StatelessWidget {
-  const _AboutPage();
-  @override
-  Widget build(BuildContext context) => const Center(child: Text('About ISHI'));
-}
+
 class _DonatePage extends StatelessWidget {
   const _DonatePage();
   @override
