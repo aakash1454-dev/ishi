@@ -1,0 +1,14 @@
+.git
+.gitignore
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+venv/
+.work/
+runs/
+*.ipynb
+node_modules/
+build/
+dist/

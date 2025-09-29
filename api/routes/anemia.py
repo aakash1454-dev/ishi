@@ -1,28 +1,41 @@
 # api/routes/anemia.py
-import os, io, time, hashlib, traceback
+import io
+import os
+import time
+import hashlib
+import traceback
 from pathlib import Path
 from typing import Optional, Tuple
-
-from fastapi import APIRouter, UploadFile, File, HTTPException
-from fastapi.responses import JSONResponse
 
 import torch
 import torch.nn as nn
 import torchvision.transforms as T
-from PIL import Image, ImageOps
-
-# Optional cropper deps
-import cv2
 import numpy as np
+import cv2
+from PIL import Image, ImageOps
+from fastapi import APIRouter, File, UploadFile, HTTPException
+from fastapi.responses import JSONResponse, Response
 
+from api.models.loader import load_model_from_ckpt
 from api.utils.config import get_anemia_threshold
-from training.anemia.train import build_model  # used when loading resnet18 ckpts
 
-# Try to import pseudomask helper (optional)
-try:
-    from ..psuedomask import run_pseudomask_on_bytes  # your existing util
-except Exception:
-    run_pseudomask_on_bytes = None
+# Try to import pseudomask helper (optional; tolerate different paths/typos)
+run_pseudomask_on_bytes = None
+for _cand in (
+    "api.utils.pseudomask",
+    "api.utils.psuedomask",
+    "api.psuedomask",
+    "api.pseudomask",
+    "..utils.pseudomask",
+    "..psuedomask",
+):
+    try:
+        mod = __import__(_cand, fromlist=["run_pseudomask_on_bytes"])
+        run_pseudomask_on_bytes = getattr(mod, "run_pseudomask_on_bytes", None)
+        if run_pseudomask_on_bytes:
+            break
+    except Exception:
+        pass
 
 router = APIRouter()
 
@@ -32,9 +45,9 @@ torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
 # -------- Config --------
-CKPT_PATH = Path(os.getenv("ANEMIA_CKPT", ""))      # REQUIRED at runtime
+CKPT_PATH = Path(os.getenv("ANEMIA_CKPT", ""))  # REQUIRED at runtime
 IMG_SIZE = int(os.getenv("ANEMIA_IMG_SIZE", "224"))
-MAX_IMAGE_BYTES = int(os.getenv("ANEMIA_MAX_IMAGE_BYTES", str(5 * 1024 * 1024)))  # 5MB default
+MAX_IMAGE_BYTES = int(os.getenv("ANEMIA_MAX_IMAGE_BYTES", str(5 * 1024 * 1024)))  # 5MB
 ANEMIA_ARCH = os.getenv("ANEMIA_ARCH", "auto")  # "auto" | "resnet18" | "simple_cnn"
 
 # -------- Globals --------
@@ -49,12 +62,13 @@ def _make_transform():
     return T.Compose([
         T.Resize((IMG_SIZE, IMG_SIZE)),
         T.ToTensor(),
+        # If your training used ImageNet normalization, keep this:
         T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
 
-# -------- Checkpoint helpers --------
+# -------- Checkpoint helpers (arch inference for ANEMIA_ARCH=auto) --------
 def _extract_state_dict(obj):
-    """Accept {"model": sd}, {"state_dict": sd}, or raw state_dict."""
+    """Accept {'model': sd}, {'state_dict': sd}, or raw state_dict."""
     if isinstance(obj, nn.Module):
         return obj.state_dict()
     if isinstance(obj, dict):
@@ -74,103 +88,19 @@ def _infer_arch_from_keys(sd_keys):
         return "resnet18"
     if any(k.startswith("cnn.") for k in ks):
         return "simple_cnn"
+    # Default to resnet18 if unclear
     return "resnet18"
 
-def _remap_simplecnn_linear(sd: dict) -> dict:
-    """
-    If the checkpoint stored the final Linear layer under 'cnn.<i>.(weight|bias)'
-    (2-D weight), remap it to 'fc.(weight|bias)' so our module can load it.
-    """
-    sd2 = dict(sd)
-    # find any 2-D cnn.* weight (Linear)
-    linear_keys = [k for k in sd.keys() if k.startswith("cnn.") and k.endswith(".weight") and sd[k].ndim == 2]
-    if not linear_keys:
-        return sd2
-    # pick the highest index (likely the last layer)
-    lk = max(linear_keys, key=lambda k: int(k.split(".")[1]))
-    li = int(lk.split(".")[1])
-    w = sd[lk]
-    b = sd.get(f"cnn.{li}.bias", None)
-    # place into fc.*
-    sd2["fc.weight"] = w
-    if b is not None:
-        sd2["fc.bias"] = b
-    # remove old entries to avoid "unexpected keys"
-    del sd2[lk]
-    if b is not None and f"cnn.{li}.bias" in sd2:
-        del sd2[f"cnn.{li}.bias"]
-    return sd2
+def _resolve_arch_from_ckpt(arch_env: str, ckpt_path: Path) -> str:
+    if arch_env != "auto":
+        return arch_env
+    obj = torch.load(str(ckpt_path), map_location="cpu")
+    sd = _extract_state_dict(obj)
+    return _infer_arch_from_keys(sd.keys())
 
-# -------- Dynamic SimpleCNN (matches cnn.* convs; fc is separate) --------
-class SimpleCNNDynamic(nn.Module):
-    """
-    Builds a 'cnn' stack from checkpoint keys:
-      - 4D weights -> Conv2d at that index in a Sequential (gaps = Identity)
-      - 2D weights (Linear) are NOT placed in cnn; they become fc.* via remap
-    If the last conv channels != fc.in_features, a 1x1 'align' conv is added.
-    """
-    def __init__(self, sd, num_classes_default=2):
-        super().__init__()
-        # Collect 4D conv weights
-        conv_w = {
-            int(k.split(".")[1]): sd[k]
-            for k in sd.keys()
-            if k.startswith("cnn.") and k.endswith(".weight") and sd[k].ndim == 4
-        }
-        if not conv_w:
-            raise RuntimeError("simple_cnn: no 4D conv weights found in checkpoint")
-
-        max_idx = max(conv_w.keys())
-        seq = []
-        last_out = None
-        for i in range(max_idx + 1):
-            if i in conv_w:
-                w = conv_w[i]
-                out_ch, in_ch, kh, kw = w.shape
-                conv = nn.Conv2d(in_ch, out_ch, kernel_size=(kh, kw),
-                                 padding=(kh // 2, kw // 2), bias=True)
-                seq.append(conv)
-                last_out = int(out_ch)
-            else:
-                seq.append(nn.Identity())
-        self.cnn = nn.Sequential(*seq)
-
-        self.gap = nn.AdaptiveAvgPool2d((1, 1))
-        self.align = None
-        # fc will be created in _finalize_fc(...)
-        self.fc = None
-        self._last_out = last_out
-        self._num_classes_default = int(num_classes_default)
-
-    def _finalize_fc(self, fc_in: Optional[int], fc_out: Optional[int]):
-        if fc_in is not None and fc_out is not None:
-            # add align if channels don't match
-            if self._last_out is None:
-                raise RuntimeError("simple_cnn: cannot infer channels before fc")
-            if self._last_out != fc_in:
-                self.align = nn.Conv2d(self._last_out, fc_in, kernel_size=1, bias=True)
-            self.fc = nn.Linear(fc_in, fc_out)
-        else:
-            # default small head if fc not in checkpoint
-            if self._last_out is None:
-                raise RuntimeError("simple_cnn: cannot infer channels for classifier")
-            self.fc = nn.Linear(self._last_out, self._num_classes_default)
-
-    def forward(self, x):
-        x = self.cnn(x)
-        x = self.gap(x)
-        if self.align is not None:
-            x = self.align(x)
-        x = torch.flatten(x, 1)
-        x = self.fc(x)
-        return x
-
-# -------- Loader --------
+# -------- Loader (runtime-only) --------
 def _load_classifier_strict():
-    """
-    Loads either ResNet-18 or SimpleCNN (auto-detected by checkpoint keys,
-    unless ANEMIA_ARCH overrides). Populates globals; raises on fatal issues.
-    """
+    """Loads model via runtime loader (no training imports)."""
     global _classifier, _xform, _classes, _backbone, _model_tag
 
     ckpt_path = str(CKPT_PATH)
@@ -179,63 +109,43 @@ def _load_classifier_strict():
     if not os.path.isfile(ckpt_path):
         raise RuntimeError(f"Classifier checkpoint not found: {ckpt_path}")
 
-    obj = torch.load(ckpt_path, map_location=_device)
-    sd = _extract_state_dict(obj)
+    arch = _resolve_arch_from_ckpt(ANEMIA_ARCH, CKPT_PATH)
+    model = load_model_from_ckpt(arch, ckpt_path=str(CKPT_PATH))
+    model.to(_device).eval()
 
-    # Optional metadata
-    if isinstance(obj, dict):
-        meta_classes = obj.get("classes")
-        if meta_classes and isinstance(meta_classes, (list, tuple)) and "anemic" in meta_classes:
-            _classes = list(meta_classes)
+    # Optional: class names stored in the checkpoint dict
+    try:
+        raw = torch.load(str(CKPT_PATH), map_location="cpu")
+        if isinstance(raw, dict):
+            meta_classes = raw.get("classes")
+            if meta_classes and isinstance(meta_classes, (list, tuple)) and "anemic" in meta_classes:
+                _classes = list(meta_classes)
+    except Exception:
+        pass
 
-    arch = ANEMIA_ARCH if ANEMIA_ARCH != "auto" else _infer_arch_from_keys(sd.keys())
-
-    if arch == "resnet18":
-        model = build_model(num_classes=2, backbone="resnet18", pretrained=False).to(_device)
-        # strict load; will raise if mismatch
-        model.load_state_dict(sd, strict=True)
-        _backbone = "resnet18"
-    elif arch == "simple_cnn":
-        # Inspect for a 2-D linear under cnn.* to size fc
-        linear_keys = [k for k in sd.keys() if k.startswith("cnn.") and k.endswith(".weight") and sd[k].ndim == 2]
-        fc_in = fc_out = None
-        if linear_keys:
-            lk = max(linear_keys, key=lambda k: int(k.split(".")[1]))
-            fc_out, fc_in = sd[lk].shape  # (out_features, in_features)
-
-        model = SimpleCNNDynamic(sd).to(_device)
-        model._finalize_fc(fc_in, fc_out)
-
-        # Remap cnn.<i> (2D) -> fc.* so we actually load the head weights
-        sd2 = _remap_simplecnn_linear(sd)
-
-        missing, unexpected = model.load_state_dict(sd2, strict=False)
-        if missing:
-            print(f"[ISHI] simple_cnn missing keys: {missing[:10]}{' ...' if len(missing)>10 else ''}")
-        if unexpected:
-            print(f"[ISHI] simple_cnn unexpected keys: {unexpected[:10]}{' ...' if len(unexpected)>10 else ''}")
-        _backbone = "simple_cnn"
-    else:
-        raise RuntimeError(f"Unknown ANEMIA_ARCH: {arch}")
-
-    model.eval()
     _classifier = model
     _xform = _make_transform()
+    _backbone = arch
     _model_tag = os.path.basename(ckpt_path) or arch
     print(f"[ISHI] Classifier ready: tag={_model_tag} arch={_backbone} classes={_classes}")
     return _classifier, _xform
 
 def preload_model():
-    """Called from app startup to fail fast if model can't load."""
+    """Optionally call this from app startup to fail fast if model can't load."""
     return _load_classifier_strict()
+
+def _get_model():
+    global _classifier, _xform
+    if _classifier is None or _xform is None:
+        _load_classifier_strict()
+    return _classifier, _xform
 
 # -------- Inference --------
 def _predict_p_anemic(pil_img: Image.Image) -> float:
-    if _classifier is None or _xform is None:
-        raise RuntimeError("Model not ready")
-    x = _xform(pil_img).unsqueeze(0).to(_device)
+    model, xform = _get_model()
+    x = xform(pil_img).unsqueeze(0).to(_device)
     with torch.no_grad():
-        logits = _classifier(x)
+        logits = model(x)
         probs = torch.softmax(logits, dim=1).cpu().numpy()[0]
     try:
         idx_anemic = _classes.index("anemic")
@@ -311,7 +221,6 @@ def _try_mask_crop(raw: bytes) -> Tuple[Optional[Image.Image], str]:
         print(traceback.format_exc())
         return None, "cropper_error"
 
-
 def _center_square_crop(raw: bytes, frac: float = 0.8):
     """Heuristic fallback: center square crop."""
     arr = np.frombuffer(raw, dtype=np.uint8)
@@ -328,16 +237,14 @@ def _center_square_crop(raw: bytes, frac: float = 0.8):
     rgb = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
     return Image.fromarray(rgb)
 
-# -------- Route --------
+# -------- Routes --------
 @router.post("/predict")
 async def predict(image: UploadFile = File(...)):
     """
-    Prediction endpoint (auto-detects arch from ckpt if ANEMIA_ARCH=auto):
-    - field: 'image' (multipart/form-data)
+    Prediction endpoint:
+      - field: 'image' (multipart/form-data)
+      - arch: ANEMIA_ARCH env; 'auto' infers from ckpt keys
     """
-    if _classifier is None or _xform is None:
-        raise HTTPException(status_code=503, detail="model not ready")
-
     # Basic input validation
     if image.content_type not in ("image/jpeg", "image/png"):
         raise HTTPException(status_code=400, detail="unsupported content-type")
@@ -382,9 +289,6 @@ async def predict(image: UploadFile = File(...)):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"predict failed: {e}")
-    
-# in api/routes/anemia.py
-from fastapi.responses import Response
 
 @router.post("/debug/crop")
 async def debug_crop(image: UploadFile = File(...)):
@@ -395,8 +299,6 @@ async def debug_crop(image: UploadFile = File(...)):
         if cc is None:
             raise HTTPException(status_code=400, detail=f"no crop ({tag})")
         cropped, tag = cc, "center_crop"
-    import io
     buf = io.BytesIO()
     cropped.save(buf, format="PNG")
     return Response(content=buf.getvalue(), media_type="image/png")
-
