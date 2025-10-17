@@ -71,30 +71,44 @@ jobs:
       #       echo "Patched $MF (removed package attr)"
       #     fi
 
-      - name: Restore keystore (safe heredoc)
-        run: |
-            # Write the base64 secret to a file safely, even if it contains newlines
-            base64 --decode > "$HOME/ishi_upload.jks" <<'B64'
-            ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-            B64
+      - name: Restore keystore (robust decode)
+  env:
+    B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+    STORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+    KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+    ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+  run: |
+    python - <<'PY'
+    import os, base64, sys
+    b64 = os.environ['B64']
+    # tolerate accidental whitespace/newlines
+    b64 = "".join(b64.split())
+    out = os.path.expanduser('~/ishi_upload.jks')
+    with open(out, 'wb') as f:
+      f.write(base64.b64decode(b64))
+    print("Wrote", out, "size=", os.path.getsize(out))
+    PY
 
-            # Create key.properties for Gradle
-            cat > mobile/android/key.properties <<'EOF'
-            storeFile=$HOME/ishi_upload.jks
-            storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-            keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
-            keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
-            EOF
+    cat > mobile/android/key.properties <<EOF
+    storeFile=$HOME/ishi_upload.jks
+    storePassword=${STORE_PASS}
+    keyAlias=${ALIAS}
+    keyPassword=${KEY_PASS}
+    EOF
 
       - name: Verify keystore (hash + keytool)
-        run: |
-          ls -lh $HOME/ishi_upload.jks
-          sha256sum $HOME/ishi_upload.jks
-          keytool -list \
-            -keystore $HOME/ishi_upload.jks \
-            -alias "${{ secrets.ANDROID_KEY_ALIAS }}" \
-            -storepass "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" \
-            -keypass "${{ secrets.ANDROID_KEY_PASSWORD }}"
+  env:
+    STORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+    KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+    ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+  run: |
+    ls -lh $HOME/ishi_upload.jks
+    sha256sum $HOME/ishi_upload.jks
+    keytool -list \
+      -keystore $HOME/ishi_upload.jks \
+      -alias "${ALIAS}" \
+      -storepass "${STORE_PASS}" \
+      -keypass "${KEY_PASS}"
 
 
       - name: Accept Android licenses
