@@ -24,7 +24,6 @@ jobs:
         with:
           flutter-version: "3.24.0"
 
-      # Optional caches (you can comment these out if you want a fully "clean" run)
       - name: Cache Gradle
         uses: actions/cache@v4
         with:
@@ -45,7 +44,6 @@ jobs:
         working-directory: mobile
         run: flutter clean
 
-      # Force compile/target/min for all subprojects via local.properties (AGP 8 uses this in Flutter plugin)
       - name: Set SDK levels in local.properties
         working-directory: mobile/android
         run: |
@@ -62,59 +60,40 @@ jobs:
         working-directory: mobile
         run: flutter pub get
 
-      # If you must stay on 3.x, uncomment this patch block instead of the upgrade above.
-      # - name: Patch isar_flutter_libs manifest (AGP 8 fix)
-      #   run: |
-      #     MF="$HOME/.pub-cache/hosted/pub.dev/isar_flutter_libs-3.1.0+1/android/src/main/AndroidManifest.xml"
-      #     if [ -f "$MF" ]; then
-      #       sed -i 's/package="dev.isar.isar_flutter_libs"//g' "$MF"
-      #       echo "Patched $MF (removed package attr)"
-      #     fi
-
-      - name: Restore keystore (robust decode)
-  env:
-    B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-    STORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-    KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
-    ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-  run: |
-    python - <<'PY'
-    import os, base64, sys
-    b64 = os.environ['B64']
-    # tolerate accidental whitespace/newlines
-    b64 = "".join(b64.split())
-    out = os.path.expanduser('~/ishi_upload.jks')
-    with open(out, 'wb') as f:
-      f.write(base64.b64decode(b64))
-    print("Wrote", out, "size=", os.path.getsize(out))
-    PY
-
-    cat > mobile/android/key.properties <<EOF
-    storeFile=$HOME/ishi_upload.jks
-    storePassword=${STORE_PASS}
-    keyAlias=${ALIAS}
-    keyPassword=${KEY_PASS}
-    EOF
+            - name: Restore keystore (robust)
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          python3 -c "import os,base64,pathlib;b=''.join(os.environ['ANDROID_KEYSTORE_BASE64'].split());p=pathlib.Path.home()/'ishi_upload.jks';p.write_bytes(base64.b64decode(b));print('Wrote:',p,'bytes:',p.stat().st_size)"
+          printf '%s\n' \
+            "storeFile=$HOME/ishi_upload.jks" \
+            "storePassword=${ANDROID_KEYSTORE_PASSWORD}" \
+            "keyAlias=${ANDROID_KEY_ALIAS}" \
+            "keyPassword=${ANDROID_KEY_PASSWORD}" \
+            > mobile/android/key.properties
 
       - name: Verify keystore (hash + keytool)
-  env:
-    STORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-    KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
-    ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-  run: |
-    ls -lh $HOME/ishi_upload.jks
-    sha256sum $HOME/ishi_upload.jks
-    keytool -list \
-      -keystore $HOME/ishi_upload.jks \
-      -alias "${ALIAS}" \
-      -storepass "${STORE_PASS}" \
-      -keypass "${KEY_PASS}"
-
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          ls -lh "$HOME/ishi_upload.jks"
+          sha256sum "$HOME/ishi_upload.jks"
+          keytool -list \
+            -keystore "$HOME/ishi_upload.jks" \
+            -alias "${ANDROID_KEY_ALIAS}" \
+            -storepass "${ANDROID_KEYSTORE_PASSWORD}" \
+            -keypass "${ANDROID_KEY_PASSWORD}"
 
       - name: Accept Android licenses
         run: yes | sdkmanager --licenses
 
-      # Install platforms: 35 (your compileSdk) AND 31 (covers libs that reference lStar)
       - name: Install Android platforms & build tools
         run: |
           sdkmanager "platforms;android-35" "build-tools;35.0.0" "platforms;android-31"
@@ -138,11 +117,26 @@ jobs:
             --dart-define=MIN_APP_VERSION=1.0.0 \
             --dart-define=APP_STORE_URL=https://ironstronginitiative.com/app
 
-      - name: Upload APK artifact (overwrite)
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-release           # same name each run
+          name: app-release
           path: mobile/build/app/outputs/flutter-apk/app-release.apk
-          overwrite: true             # <---- overwrite instead of piling up
-          retention-days: 14          # optional: keep for 14 days
+          overwrite: true
+          retention-days: 14
 
+      - name: Build release AAB
+        working-directory: mobile
+        run: |
+          flutter build appbundle --release \
+            --dart-define=API_BASE_URL=https://ishi-api.onrender.com \
+            --dart-define=MIN_APP_VERSION=1.0.0 \
+            --dart-define=APP_STORE_URL=https://ironstronginitiative.com/app
+
+      - name: Upload AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-aab
+          path: mobile/build/app/outputs/bundle/release/app-release.aab
+          overwrite: true
+          retention-days: 14
