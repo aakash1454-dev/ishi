@@ -71,14 +71,14 @@ jobs:
           set -euo pipefail
           # Robust decode: keep only valid base64 chars and remove whitespace
           python3 - <<'PY'
-import os, re, base64, pathlib
-s = os.environ['ANDROID_KEYSTORE_BASE64']
-s = re.sub(r'\s+', '', s)                              # drop whitespace
-s = ''.join(ch for ch in s if ch in 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=')  # keep valid b64
-p = pathlib.Path.home() / 'ishi_upload.jks'
-p.write_bytes(base64.b64decode(s))
-print("Wrote:", p, "bytes:", p.stat().st_size)
-PY
+          import os, re, base64, pathlib
+          s = os.environ['ANDROID_KEYSTORE_BASE64']
+          s = re.sub(r'\s+', '', s)                              # drop whitespace
+          s = ''.join(ch for ch in s if ch in 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=')  # keep valid b64
+          p = pathlib.Path.home() / 'ishi_upload.jks'
+          p.write_bytes(base64.b64decode(s))
+          print("Wrote:", p, "bytes:", p.stat().st_size)
+          PY
 
           # Write Gradle signing config
           {
