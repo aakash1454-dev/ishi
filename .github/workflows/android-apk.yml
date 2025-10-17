@@ -69,11 +69,16 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
           set -euo pipefail
-          # Decode base64 (strip accidental whitespace/newlines)
-          python3 -c "import os,base64,pathlib;b=''.join(os.environ['ANDROID_KEYSTORE_BASE64'].split());p=pathlib.Path.home()/'ishi_upload.jks';p.write_bytes(base64.b64decode(b));print('Wrote:',p,'bytes:',p.stat().st_size)"
-
-          ls -lh "$HOME/ishi_upload.jks"
-          sha256sum "$HOME/ishi_upload.jks"
+          # Robust decode: keep only valid base64 chars and remove whitespace
+          python3 - <<'PY'
+import os, re, base64, pathlib
+s = os.environ['ANDROID_KEYSTORE_BASE64']
+s = re.sub(r'\s+', '', s)                              # drop whitespace
+s = ''.join(ch for ch in s if ch in 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=')  # keep valid b64
+p = pathlib.Path.home() / 'ishi_upload.jks'
+p.write_bytes(base64.b64decode(s))
+print("Wrote:", p, "bytes:", p.stat().st_size)
+PY
 
           # Write Gradle signing config
           {
@@ -82,10 +87,10 @@ jobs:
             echo "keyAlias=${ANDROID_KEY_ALIAS}"
             echo "keyPassword=${ANDROID_KEY_PASSWORD}"
           } > mobile/android/key.properties
-          echo "---- key.properties ----"
-          cat mobile/android/key.properties
 
           # Verify passwords/alias early (fails fast if wrong)
+          ls -lh "$HOME/ishi_upload.jks"
+          sha256sum "$HOME/ishi_upload.jks"
           keytool -list \
             -keystore "$HOME/ishi_upload.jks" \
             -alias "$ANDROID_KEY_ALIAS" \
