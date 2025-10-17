@@ -80,6 +80,17 @@ jobs:
           keyAlias=${{ secrets.KEY_ALIAS }}
           keyPassword=${{ secrets.KEY_PASSWORD }}
           EOF
+      
+      - name: Verify keystore (hash + keytool)
+        run: |
+          ls -lh $HOME/ishi_upload.jks
+          sha256sum $HOME/ishi_upload.jks
+          keytool -list \
+            -keystore $HOME/ishi_upload.jks \
+            -alias "${{ secrets.ANDROID_KEY_ALIAS }}" \
+            -storepass "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" \
+            -keypass "${{ secrets.ANDROID_KEY_PASSWORD }}"
+
 
       - name: Accept Android licenses
         run: yes | sdkmanager --licenses
