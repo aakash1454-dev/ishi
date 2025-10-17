@@ -3,7 +3,7 @@ name: Build Android APK
 on:
   workflow_dispatch: {}
   push:
-    branches: [ main ]
+    branches: [ main, aakash1454-dev ]
 
 jobs:
   build-apk:
