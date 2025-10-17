@@ -71,16 +71,21 @@ jobs:
       #       echo "Patched $MF (removed package attr)"
       #     fi
 
-      - name: Restore keystore
+      - name: Restore keystore (safe heredoc)
         run: |
-          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > $HOME/ishi_upload.jks
-          cat > mobile/android/key.properties <<EOF
-          storeFile=$HOME/ishi_upload.jks
-          storePassword=${{ secrets.KEYSTORE_PASSWORD }}
-          keyAlias=${{ secrets.KEY_ALIAS }}
-          keyPassword=${{ secrets.KEY_PASSWORD }}
-          EOF
-      
+            # Write the base64 secret to a file safely, even if it contains newlines
+            base64 --decode > "$HOME/ishi_upload.jks" <<'B64'
+            ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+            B64
+
+            # Create key.properties for Gradle
+            cat > mobile/android/key.properties <<'EOF'
+            storeFile=$HOME/ishi_upload.jks
+            storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+            keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
+            keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
+            EOF
+
       - name: Verify keystore (hash + keytool)
         run: |
           ls -lh $HOME/ishi_upload.jks
