@@ -60,7 +60,7 @@ jobs:
         working-directory: mobile
         run: flutter pub get
 
-            - name: Restore keystore (robust)
+      - name: Restore & verify keystore
         shell: bash
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -68,28 +68,28 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
-          python3 -c "import os,base64,pathlib;b=''.join(os.environ['ANDROID_KEYSTORE_BASE64'].split());p=pathlib.Path.home()/'ishi_upload.jks';p.write_bytes(base64.b64decode(b));print('Wrote:',p,'bytes:',p.stat().st_size)"
-          printf '%s\n' \
-            "storeFile=$HOME/ishi_upload.jks" \
-            "storePassword=${ANDROID_KEYSTORE_PASSWORD}" \
-            "keyAlias=${ANDROID_KEY_ALIAS}" \
-            "keyPassword=${ANDROID_KEY_PASSWORD}" \
-            > mobile/android/key.properties
-
-      - name: Verify keystore (hash + keytool)
-        shell: bash
-        env:
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-        run: |
+          set -euo pipefail
+          # Decode base64 (strip accidental whitespace/newlines)
+          echo "$ANDROID_KEYSTORE_BASE64" | tr -d '\n\r ' | base64 --decode > "$HOME/ishi_upload.jks"
           ls -lh "$HOME/ishi_upload.jks"
           sha256sum "$HOME/ishi_upload.jks"
+
+          # Write Gradle signing config
+          {
+            echo "storeFile=$HOME/ishi_upload.jks"
+            echo "storePassword=${ANDROID_KEYSTORE_PASSWORD}"
+            echo "keyAlias=${ANDROID_KEY_ALIAS}"
+            echo "keyPassword=${ANDROID_KEY_PASSWORD}"
+          } > mobile/android/key.properties
+          echo "---- key.properties ----"
+          cat mobile/android/key.properties
+
+          # Verify passwords/alias early (fails fast if wrong)
           keytool -list \
             -keystore "$HOME/ishi_upload.jks" \
-            -alias "${ANDROID_KEY_ALIAS}" \
-            -storepass "${ANDROID_KEYSTORE_PASSWORD}" \
-            -keypass "${ANDROID_KEY_PASSWORD}"
+            -alias "$ANDROID_KEY_ALIAS" \
+            -storepass "$ANDROID_KEYSTORE_PASSWORD" \
+            -keypass "$ANDROID_KEY_PASSWORD"
 
       - name: Accept Android licenses
         run: yes | sdkmanager --licenses
