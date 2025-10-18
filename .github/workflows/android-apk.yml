@@ -69,16 +69,20 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
           set -euo pipefail
-          # Robust decode: keep only valid base64 chars and remove whitespace
+
+          # Decode base64 (only strip whitespace/newlines; do NOT filter characters)
           python3 - <<'PY'
-          import os, re, base64, pathlib
-          s = os.environ['ANDROID_KEYSTORE_BASE64']
-          s = re.sub(r'\s+', '', s)                              # drop whitespace
-          s = ''.join(ch for ch in s if ch in 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=')  # keep valid b64
-          p = pathlib.Path.home() / 'ishi_upload.jks'
-          p.write_bytes(base64.b64decode(s))
-          print("Wrote:", p, "bytes:", p.stat().st_size)
+          import os, base64, pathlib
+          b64 = os.environ['ANDROID_KEYSTORE_BASE64'].strip()
+          b64 = "".join(b64.split())  # remove whitespace/newlines
+          out = pathlib.Path.home() / 'ishi_upload.jks'
+          out.write_bytes(base64.b64decode(b64))
+          print("Wrote:", out, "bytes:", out.stat().st_size)
           PY
+
+          ls -lh "$HOME/ishi_upload.jks"
+          echo "Runner sha256:"
+          sha256sum "$HOME/ishi_upload.jks"
 
           # Write Gradle signing config
           {
@@ -87,16 +91,26 @@ jobs:
             echo "keyAlias=${ANDROID_KEY_ALIAS}"
             echo "keyPassword=${ANDROID_KEY_PASSWORD}"
           } > mobile/android/key.properties
+          echo "---- key.properties ----"
+          cat mobile/android/key.properties
 
-          # Verify passwords/alias early (fails fast if wrong)
-          ls -lh "$HOME/ishi_upload.jks"
-          sha256sum "$HOME/ishi_upload.jks"
-          keytool -list \
-            -keystore "$HOME/ishi_upload.jks" \
-            -storetype JKS \
-            -alias "$ANDROID_KEY_ALIAS" \
-            -storepass "$ANDROID_KEYSTORE_PASSWORD" \
-            -keypass "$ANDROID_KEY_PASSWORD"
+          echo "Verify with JKS..."
+          if keytool -list \
+               -keystore "$HOME/ishi_upload.jks" \
+               -storetype JKS \
+               -alias "$ANDROID_KEY_ALIAS" \
+               -storepass "$ANDROID_KEYSTORE_PASSWORD" \
+               -keypass "$ANDROID_KEY_PASSWORD" ; then
+            echo "JKS verify OK"
+          else
+            echo "JKS verify failed; trying PKCS12..."
+            keytool -list \
+               -keystore "$HOME/ishi_upload.jks" \
+               -storetype PKCS12 \
+               -storepass "$ANDROID_KEYSTORE_PASSWORD" || exit 1
+            echo "PKCS12 verify OK"
+          fi
+
 
       - name: Accept Android licenses
         run: yes | sdkmanager --licenses
