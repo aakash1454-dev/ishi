@@ -93,6 +93,7 @@ jobs:
           sha256sum "$HOME/ishi_upload.jks"
           keytool -list \
             -keystore "$HOME/ishi_upload.jks" \
+            -storetype JKS \
             -alias "$ANDROID_KEY_ALIAS" \
             -storepass "$ANDROID_KEYSTORE_PASSWORD" \
             -keypass "$ANDROID_KEY_PASSWORD"
