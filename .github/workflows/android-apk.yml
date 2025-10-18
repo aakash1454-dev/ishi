@@ -130,18 +130,6 @@ jobs:
         working-directory: mobile
         run: flutter pub run flutter_native_splash:create
 
-      - name: Shrink splash PNGs (workaround AAPT2 timeouts)
-        shell: bash
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y optipng
-          echo "Before optimization:"
-          find mobile/android/app/src/main/res -type f \( -name "splash.png" -o -name "android12splash.png" \) -exec ls -lh {} +
-          # Optimize in place (lossless)
-          find mobile/android/app/src/main/res -type f \( -name "splash.png" -o -name "android12splash.png" \) -exec optipng -o7 {} +
-          echo "After optimization:"
-          find mobile/android/app/src/main/res -type f \( -name "splash.png" -o -name "android12splash.png" \) -exec ls -lh {} +
-
       - name: Build release APK
         working-directory: mobile
         run: |
