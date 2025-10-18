@@ -52,10 +52,10 @@ flutter_launcher_icons:
 # --- flutter_native_splash CONFIG (top-level) ---
 flutter_native_splash:
   color: "#FFFFFF"
-  image: assets/logo.png
+  image: assets/app_icon.png
   android_12:
     color: "#FFFFFF"
-    image: assets/logo.png
+    image: assets/app_icon.png
   web: false
 
 
