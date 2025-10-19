@@ -104,3 +104,4 @@ class _DonatePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) =>
       const Center(child: Text('Donate link / QR here'));
+}
