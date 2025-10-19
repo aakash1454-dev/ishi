@@ -15,6 +15,7 @@ class DisclaimerGate {
 
     final accepted = await showDialog<bool>(
       context: context,
+      useRootNavigator: true,         // <— IMPORTANT
       barrierDismissible: false,
       builder: (ctx) => const _DisclaimerDialog(),
     );
@@ -35,12 +36,12 @@ class _DisclaimerDialog extends StatefulWidget {
 }
 
 class _DisclaimerDialogState extends State<_DisclaimerDialog> {
-  bool _checked = false;
+  bool _agreed = false;
 
   Future<void> _openPolicy() async {
     final uri = Uri.parse('https://www.ironstronginitiative.com/privacy');
-    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-      // ignore: use_build_context_synchronously
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Could not open Privacy Policy')),
       );
@@ -53,50 +54,50 @@ class _DisclaimerDialogState extends State<_DisclaimerDialog> {
       title: const Text('Important: Not a Medical Device'),
       content: SizedBox(
         width: 380,
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: const [
-              Text(
-                'ISHI provides an AI-assisted anemia risk indication from an eyelid photo. '
-                'It is for awareness only and is NOT a diagnosis or a substitute for professional medical advice.',
-              ),
-              SizedBox(height: 12),
-              Text('By continuing, you acknowledge that:'),
-              SizedBox(height: 6),
-              _Bullet('Results may be inaccurate and can be affected by lighting, camera quality, and positioning.'),
-              _Bullet('You will not rely on this app to make medical decisions.'),
-              _Bullet('If you have symptoms or concerns, you will consult a qualified clinician.'),
-              SizedBox(height: 12),
-              Text('See our Privacy Policy for how your data is handled.'),
-            ],
-          ),
-        ),
-      ),
-      actionsAlignment: MainAxisAlignment.spaceBetween,
-      actions: [
-        TextButton(
-          onPressed: _openPolicy,
-          child: const Text('Privacy Policy'),
-        ),
-        Row(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Checkbox(
-              value: _checked,
-              onChanged: (v) => setState(() => _checked = v ?? false),
+            const Text(
+              'ISHI provides an AI-assisted anemia risk indication from an eyelid photo. '
+              'It is for awareness only and is NOT a diagnosis or a substitute for professional medical advice.',
             ),
-            const Text('I have read and agree'),
-            const SizedBox(width: 12),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel'),
+            const SizedBox(height: 12),
+            const Text('By continuing, you acknowledge that:'),
+            const SizedBox(height: 6),
+            const _Bullet('Results may be inaccurate and can be affected by lighting, camera quality, and positioning.'),
+            const _Bullet('You will not rely on this app to make medical decisions.'),
+            const _Bullet('If you have symptoms or concerns, you will consult a qualified clinician.'),
+            const SizedBox(height: 12),
+            InkWell(
+              onTap: _openPolicy,
+              child: const Text(
+                'Privacy Policy',
+                style: TextStyle(decoration: TextDecoration.underline, color: Colors.blueAccent),
+              ),
             ),
-            const SizedBox(width: 8),
-            ElevatedButton(
-              onPressed: _checked ? () => Navigator.of(context).pop(true) : null,
-              child: const Text('Continue'),
+            const SizedBox(height: 12),
+            // Use CheckboxListTile to ensure the whole row is tappable
+            CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              value: _agreed,
+              onChanged: (v) => setState(() => _agreed = v ?? false),
+              title: const Text('I have read and agree'),
+              controlAffinity: ListTileControlAffinity.leading,
             ),
           ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context, rootNavigator: true).pop(false),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _agreed
+              ? () => Navigator.of(context, rootNavigator: true).pop(true)
+              : null,
+          child: const Text('Continue'),
         ),
       ],
     );
@@ -108,13 +109,9 @@ class _Bullet extends StatelessWidget {
   const _Bullet(this.text, {Key? key}) : super(key: key);
 
   @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
+  Widget build(BuildContext context) =>
+      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const Text('•  '),
         Expanded(child: Text(text)),
-      ],
-    );
-  }
+      ]);
 }

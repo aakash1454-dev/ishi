@@ -15,37 +15,39 @@ class ISHIApp extends StatefulWidget {
 }
 
 class _ISHIAppState extends State<ISHIApp> {
-  // NEW: navigator key so dialogs always have a proper Navigator context
+  // Navigator key so dialogs/pushes always have a valid Navigator
   final GlobalKey<NavigatorState> _navKey = GlobalKey<NavigatorState>();
   int _index = 0;
 
   // Intercept AI Check (index 1): show disclaimer, then push CameraPage
   Future<void> _handleNavTap(int i) async {
-    const aiCheckIndex = 1; // matches FloatingNavBar's "ISHI-AI Check"
+    const aiCheckIndex = 1; // "ISHI-AI Check"
 
     if (i == aiCheckIndex) {
-      final ctx = _navKey.currentContext ?? context;
-
-      // Tiny toast so you know the tap fired
-      ScaffoldMessenger.of(ctx).showSnackBar(
+      // Use the Scaffold context for the SnackBar
+      ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Opening ISHI-AI Check…'),
           duration: Duration(milliseconds: 500),
         ),
       );
 
-      // Show the disclaimer using a Navigator-aware context
+      // Show disclaimer using a Navigator-aware context
+      final ctx = _navKey.currentContext ?? context;
       final ok = await DisclaimerGate.ensureAccepted(ctx, alwaysShow: true);
       if (!ok) return;
 
-      // Navigate only after acceptance
-      await _navKey.currentState!.push(
-        MaterialPageRoute(builder: (_) => const CameraPage()),
-      );
-      return; // do not switch the tab highlight
+      // Push AFTER the dialog fully closes
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final nav = _navKey.currentState;
+        if (nav == null) return;
+        nav.push(MaterialPageRoute(builder: (_) => const CameraPage()));
+      });
+
+      return; // <- IMPORTANT: don't fall through and switch tabs
     }
 
-    // Normal tab switch
+    // Normal tab switch for other items
     setState(() => _index = i);
   }
 
@@ -54,7 +56,7 @@ class _ISHIAppState extends State<ISHIApp> {
     return MaterialApp(
       title: 'ISHI App',
       debugShowCheckedModeBanner: false,
-      navigatorKey: _navKey, // <-- IMPORTANT
+      navigatorKey: _navKey,
       theme: ThemeData(useMaterial3: true, colorSchemeSeed: const Color(0xFF2B5CFF)),
       darkTheme: ThemeData(
         useMaterial3: true,
@@ -104,4 +106,3 @@ class _DonatePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) =>
       const Center(child: Text('Donate link / QR here'));
-}
