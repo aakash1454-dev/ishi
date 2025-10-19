@@ -11,9 +11,6 @@ import 'package:http_parser/http_parser.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-// NEW: disclaimer gate
-import '../widgets/disclaimer_gate.dart';
-
 /// Read the backend base URL from a build-time define:
 /// flutter run/build ... --dart-define=API_BASE_URL=https://ishi-api.onrender.com
 const String _apiBase =
@@ -117,7 +114,6 @@ class _CameraPageState extends State<CameraPage> {
   }
 
   Future<void> _takePhoto() async {
-    // Works on Android/iOS; on web it falls back to file input.
     final x = await _picker.pickImage(source: ImageSource.camera, imageQuality: 95);
     if (x == null) return;
     final bytes = await x.readAsBytes();
@@ -128,7 +124,6 @@ class _CameraPageState extends State<CameraPage> {
     });
   }
 
-  // NEW: upload with timeout + tiny retries
   Future<void> _submitImage() async {
     if (_imageBytes == null) return;
     final uri = _predictUri();
@@ -150,7 +145,7 @@ class _CameraPageState extends State<CameraPage> {
         try {
           final req = http.MultipartRequest('POST', uri)
             ..files.add(http.MultipartFile.fromBytes(
-              'image', // server expects "image"
+              'image',
               _imageBytes!,
               filename: 'upload.jpg',
               contentType: MediaType('image', 'jpeg'),
@@ -180,15 +175,13 @@ class _CameraPageState extends State<CameraPage> {
               _history.insert(0, entry);
             });
             await prefs.setString('ishi_test_history', jsonEncode(_history));
-            return; // success
+            return;
           } else {
             lastErr = 'HTTP ${res.statusCode}: ${res.body}';
           }
         } catch (e) {
           lastErr = e;
         }
-
-        // Small exponential backoff
         await Future.delayed(Duration(milliseconds: 250 * attempts * attempts));
       }
 
@@ -238,20 +231,10 @@ class _CameraPageState extends State<CameraPage> {
     }
   }
 
-  // NEW: gate entry with disclaimer; if declined, pop back
-  Future<void> _ensureDisclaimer() async {
-    final ok = await DisclaimerGate.ensureAccepted(context , alwaysShow: true);
-    if (!ok && mounted) {
-      Navigator.of(context).pop();
-    }
-  }
-
   @override
   void initState() {
     super.initState();
     _loadHistory();
-    // Run after first frame so we have a BuildContext
-    WidgetsBinding.instance.addPostFrameCallback((_) => _ensureDisclaimer());
   }
 
   @override
@@ -285,7 +268,7 @@ class _CameraPageState extends State<CameraPage> {
                 ),
                 const SizedBox(height: 12),
 
-                // NEW: always-visible disclaimer banner
+                // Always-visible disclaimer banner
                 const _HomeDisclaimerBanner(),
                 const SizedBox(height: 16),
 
