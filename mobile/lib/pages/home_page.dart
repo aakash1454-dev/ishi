@@ -9,10 +9,6 @@ import '../services/news_api.dart';
 import 'app_title_bar.dart';
 import 'news_detail_page.dart';
 
-// NEW: add these two imports
-import '../widgets/disclaimer_gate.dart';
-import 'camera_page.dart';
-
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
   @override
@@ -116,24 +112,11 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // NEW: gate + navigate to AI checker
-  Future<void> _goToAICheck() async {
-    final ok = await DisclaimerGate.ensureAccepted(context, alwaysShow: true);
-    if (!ok || !mounted) return;
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const CameraPage()),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // Bigger logo, smaller title inside our custom bar
       appBar: AppBar(
-        title: const AppTitleBar(
-          logoSize: 48,
-          titleFontSize: 16,
-        ),
+        title: const AppTitleBar(logoSize: 48, titleFontSize: 16),
         actions: [
           IconButton(
             tooltip: 'Refresh news',
@@ -147,40 +130,6 @@ class _HomePageState extends State<HomePage> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            // ---------- Quick Actions (AI Check) ----------
-            Card(
-              elevation: 1,
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Quick Actions',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                    ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        icon: const Icon(Icons.health_and_safety),
-                        label: const Text('ISHI AI Check'),
-                        onPressed: _goToAICheck,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'AI-assisted anemia risk indication from an eyelid photo. '
-                      'Informational only — not a diagnosis.',
-                      style: TextStyle(fontSize: 12, color: Colors.grey),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // ---------- News ----------
             Row(
               children: [
                 const Text(
