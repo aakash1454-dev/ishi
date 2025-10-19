@@ -30,7 +30,6 @@ Uri _joinPath(Uri base, String path) {
 
 class CameraPage extends StatefulWidget {
   const CameraPage({super.key});
-
   @override
   State<CameraPage> createState() => _CameraPageState();
 }
@@ -252,7 +251,6 @@ class _CameraPageState extends State<CameraPage> {
             padding: const EdgeInsets.all(20),
             child: Column(
               children: [
-                // Connectivity row
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -267,11 +265,8 @@ class _CameraPageState extends State<CameraPage> {
                   ],
                 ),
                 const SizedBox(height: 12),
-
-                // Always-visible disclaimer banner
                 const _HomeDisclaimerBanner(),
                 const SizedBox(height: 16),
-
                 const Text(
                   'About Anemia',
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
@@ -287,7 +282,6 @@ class _CameraPageState extends State<CameraPage> {
                   ),
                 ),
                 const SizedBox(height: 20),
-
                 if (_imageBytes != null) ...[
                   const Text('Selected Image:', style: TextStyle(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 10),
@@ -297,7 +291,6 @@ class _CameraPageState extends State<CameraPage> {
                   ),
                   const SizedBox(height: 20),
                 ],
-
                 if (_loading)
                   const CircularProgressIndicator()
                 else if (_result != null)
@@ -330,9 +323,7 @@ class _CameraPageState extends State<CameraPage> {
                       ),
                     ),
                   ),
-
                 const SizedBox(height: 20),
-
                 Wrap(
                   spacing: 10,
                   runSpacing: 10,
@@ -352,9 +343,7 @@ class _CameraPageState extends State<CameraPage> {
                     ),
                   ],
                 ),
-
                 const SizedBox(height: 30),
-
                 if (_history.isNotEmpty) ...[
                   const Divider(),
                   const Text('Test History',

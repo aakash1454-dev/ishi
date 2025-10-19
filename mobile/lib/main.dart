@@ -4,9 +4,6 @@ import 'pages/camera_page.dart'; // pushed after disclaimer
 import 'pages/profile_page.dart';
 import 'widgets/floating_nav.dart';
 import 'pages/about_page.dart';
-// import 'package:isar_flutter_libs/isar_flutter_libs.dart' as _;
-
-// NEW: disclaimer gate
 import 'widgets/disclaimer_gate.dart';
 
 void main() => runApp(const ISHIApp());
@@ -18,6 +15,8 @@ class ISHIApp extends StatefulWidget {
 }
 
 class _ISHIAppState extends State<ISHIApp> {
+  // NEW: navigator key so dialogs always have a proper Navigator context
+  final GlobalKey<NavigatorState> _navKey = GlobalKey<NavigatorState>();
   int _index = 0;
 
   // Intercept AI Check (index 1): show disclaimer, then push CameraPage
@@ -25,12 +24,25 @@ class _ISHIAppState extends State<ISHIApp> {
     const aiCheckIndex = 1; // matches FloatingNavBar's "ISHI-AI Check"
 
     if (i == aiCheckIndex) {
-      final ok = await DisclaimerGate.ensureAccepted(context, alwaysShow: true);
-      if (!ok || !mounted) return;
-      await Navigator.of(context).push(
+      final ctx = _navKey.currentContext ?? context;
+
+      // Tiny toast so you know the tap fired
+      ScaffoldMessenger.of(ctx).showSnackBar(
+        const SnackBar(
+          content: Text('Opening ISHI-AI Check…'),
+          duration: Duration(milliseconds: 500),
+        ),
+      );
+
+      // Show the disclaimer using a Navigator-aware context
+      final ok = await DisclaimerGate.ensureAccepted(ctx, alwaysShow: true);
+      if (!ok) return;
+
+      // Navigate only after acceptance
+      await _navKey.currentState!.push(
         MaterialPageRoute(builder: (_) => const CameraPage()),
       );
-      return; // don't switch the tab highlight
+      return; // do not switch the tab highlight
     }
 
     // Normal tab switch
@@ -42,6 +54,7 @@ class _ISHIAppState extends State<ISHIApp> {
     return MaterialApp(
       title: 'ISHI App',
       debugShowCheckedModeBanner: false,
+      navigatorKey: _navKey, // <-- IMPORTANT
       theme: ThemeData(useMaterial3: true, colorSchemeSeed: const Color(0xFF2B5CFF)),
       darkTheme: ThemeData(
         useMaterial3: true,
@@ -52,7 +65,7 @@ class _ISHIAppState extends State<ISHIApp> {
         body: SafeArea(
           child: IndexedStack(
             index: _index,
-            // IMPORTANT: Keep indices aligned with FloatingNavBar items (0..5)
+            // Keep indices aligned with FloatingNavBar items (0..5)
             children: const [
               HomePage(),             // 0
               _AiCheckPlaceholder(),  // 1 (AI Check handled via push, not a tab)
@@ -72,7 +85,7 @@ class _ISHIAppState extends State<ISHIApp> {
   }
 }
 
-// Lightweight placeholders
+// Placeholders
 class _AiCheckPlaceholder extends StatelessWidget {
   const _AiCheckPlaceholder();
   @override
@@ -91,4 +104,3 @@ class _DonatePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) =>
       const Center(child: Text('Donate link / QR here'));
-}
