@@ -13,14 +13,6 @@
     <!-- Camera (for ImagePicker) -->
     <uses-permission android:name="android.permission.CAMERA" />
 
-    <!-- Read images on Android 13+ (API 33+) -->
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-
-    <!-- Back-compat for Android 12 and below -->
-    <uses-permission
-        android:name="android.permission.READ_EXTERNAL_STORAGE"
-        android:maxSdkVersion="32" />
-
     <!-- Declare external intents used by camera/gallery to avoid package visibility issues -->
     <queries>
         <intent>
