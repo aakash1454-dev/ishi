@@ -59,11 +59,11 @@ _model_tag = "anemia"
 
 # -------- Transforms --------
 def _make_transform():
+    # SimpleCNN was trained WITHOUT normalization - just Resize + ToTensor
     return T.Compose([
         T.Resize((IMG_SIZE, IMG_SIZE)),
         T.ToTensor(),
-        # If your training used ImageNet normalization, keep this:
-        T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        # NO normalization for SimpleCNN! It was trained without it.
     ])
 
 # -------- Checkpoint helpers (arch inference for ANEMIA_ARCH=auto) --------
@@ -147,11 +147,9 @@ def _predict_p_anemic(pil_img: Image.Image) -> float:
     with torch.no_grad():
         logits = model(x)
         probs = torch.softmax(logits, dim=1).cpu().numpy()[0]
-    try:
-        idx_anemic = _classes.index("anemic")
-    except ValueError:
-        idx_anemic = 1
-    return float(probs[idx_anemic])
+    # SimpleCNN: class 0 = not anemic, class 1 = anemic
+    # So probs[1] is probability of anemic
+    return float(probs[1])
 
 def _env_true(x: str) -> bool:
     return str(x).lower() in ("1", "true", "yes", "y", "on")

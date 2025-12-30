@@ -38,6 +38,17 @@
             </intent-filter>
         </activity>
 
+        <!-- FileProvider for image_picker camera support -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.flutter.image_provider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
         <!-- Flutter config -->
         <meta-data
             android:name="flutterEmbedding"

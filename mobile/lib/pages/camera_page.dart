@@ -10,6 +10,9 @@ import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'package:intl/intl.dart';
 
+// Import the new conjunctiva guide widget
+import '../widgets/conjunctiva_guide.dart';
+
 /// Read the backend base URL from a build-time define:
 /// flutter run/build ... --dart-define=API_BASE_URL=https://ishi-api.onrender.com
 const String _apiBase =
@@ -38,6 +41,12 @@ class _CameraPageState extends State<CameraPage> {
   String? _detail;
   bool _loading = false;
   List<Map<String, String>> _history = [];
+  bool _showInstructions = true; // Show guide before camera
+  
+  // For adjustable guide overlay
+  Offset _guideOffset = Offset.zero;
+  double _guideScale = 1.0;
+  double _baseScale = 1.0; // For tracking scale at gesture start
 
   Uri? get _apiBaseUri {
     if (_apiBase.isEmpty) return null;
@@ -56,6 +65,9 @@ class _CameraPageState extends State<CameraPage> {
       _imageBytes = bytes;
       _result = null;
       _detail = null;
+      // Reset guide position for new image
+      _guideOffset = const Offset(100, 100);
+      _guideScale = 1.0;
     });
   }
 
@@ -68,6 +80,9 @@ class _CameraPageState extends State<CameraPage> {
       _imageBytes = bytes;
       _result = null;
       _detail = null;
+      // Reset guide position for new image
+      _guideOffset = const Offset(100, 100);
+      _guideScale = 1.0;
     });
   }
 
@@ -176,6 +191,18 @@ class _CameraPageState extends State<CameraPage> {
     _loadHistory();
   }
 
+  void _dismissInstructions() {
+    setState(() {
+      _showInstructions = false;
+    });
+  }
+
+  void _showInstructionsAgain() {
+    setState(() {
+      _showInstructions = true;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final api = _apiBaseUri;
@@ -184,7 +211,17 @@ class _CameraPageState extends State<CameraPage> {
         : 'API: ${api.scheme}://${api.host}${api.hasPort ? ':${api.port}' : ''}${api.path}';
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Anemia Checker')),
+      appBar: AppBar(
+        title: const Text('Anemia Checker'),
+        actions: [
+          // Help button to show instructions again
+          IconButton(
+            icon: const Icon(Icons.help_outline),
+            onPressed: _showInstructionsAgain,
+            tooltip: 'How to capture',
+          ),
+        ],
+      ),
       body: SingleChildScrollView(
         child: Center(
           child: Padding(
@@ -207,30 +244,147 @@ class _CameraPageState extends State<CameraPage> {
                 ),
                 const SizedBox(height: 16),
 
-                const Text(
-                  'About Anemia',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                ),
-                const SizedBox(height: 8),
-                const Card(
-                  child: Padding(
-                    padding: EdgeInsets.all(12),
-                    child: Text(
-                      'Anemia is a condition where you lack enough healthy red blood cells to carry adequate oxygen to your body\'s tissues. Detecting it early can help prevent fatigue, weakness, and more serious complications.',
-                      style: TextStyle(fontSize: 14),
+                // Show instruction card if first time or help requested
+                if (_showInstructions && _imageBytes == null) ...[
+                  CaptureInstructionCard(
+                    onContinue: _dismissInstructions,
+                  ),
+                  const SizedBox(height: 16),
+                ] else ...[
+                  // Regular content when not showing instructions
+                  const Text(
+                    'About Anemia',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                  ),
+                  const SizedBox(height: 8),
+                  const Card(
+                    child: Padding(
+                      padding: EdgeInsets.all(12),
+                      child: Text(
+                        'Anemia is a condition where you lack enough healthy red blood cells to carry adequate oxygen to your body\'s tissues. Detecting it early can help prevent fatigue, weakness, and more serious complications.',
+                        style: TextStyle(fontSize: 14),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 20),
-
-                if (_imageBytes != null) ...[
-                  const Text('Selected Image:', style: TextStyle(fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 10),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Image.memory(_imageBytes!, height: 200),
+                  const SizedBox(height: 16),
+                  
+                  // Quick visual reminder of the guide
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.teal.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.teal.withOpacity(0.3)),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.info_outline, color: Colors.teal, size: 20),
+                        SizedBox(width: 8),
+                        Text(
+                          'Position your lower eyelid in the crescent guide',
+                          style: TextStyle(color: Colors.teal, fontSize: 13),
+                        ),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 20),
+                ],
+
+                if (_imageBytes != null) ...[
+                  const Text('Adjust Image & Position Guide:', 
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Pinch to zoom image • Drag green guide to align',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 10),
+                  
+                  // Interactive image with draggable guide
+                  Container(
+                    height: 300,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Stack(
+                        children: [
+                          // Zoomable/pannable image
+                          InteractiveViewer(
+                            minScale: 0.5,
+                            maxScale: 4.0,
+                            child: Image.memory(
+                              _imageBytes!,
+                              fit: BoxFit.contain,
+                            ),
+                          ),
+                          
+                          // Draggable & scalable guide overlay
+                          Positioned(
+                            left: _guideOffset.dx,
+                            top: _guideOffset.dy,
+                            child: GestureDetector(
+                              onScaleStart: (_) {
+                                _baseScale = _guideScale;
+                              },
+                              onScaleUpdate: (details) {
+                                setState(() {
+                                  // Handle drag (focal point delta)
+                                  _guideOffset += details.focalPointDelta;
+                                  // Handle pinch scale
+                                  _guideScale = (_baseScale * details.scale).clamp(0.3, 2.0);
+                                });
+                              },
+                              child: Opacity(
+                                opacity: 0.7,
+                                child: ConjunctivaGuide(
+                                  width: 120 * _guideScale,
+                                  height: 50 * _guideScale,
+                                  guideColor: Colors.green,
+                                  showInstructions: false,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  
+                  // Guide size controls
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text('Guide size:', style: TextStyle(fontSize: 12)),
+                      IconButton(
+                        icon: const Icon(Icons.remove_circle_outline, size: 20),
+                        onPressed: () => setState(() {
+                          _guideScale = (_guideScale - 0.1).clamp(0.3, 2.0);
+                        }),
+                      ),
+                      Text('${(_guideScale * 100).toInt()}%', 
+                        style: const TextStyle(fontSize: 12)),
+                      IconButton(
+                        icon: const Icon(Icons.add_circle_outline, size: 20),
+                        onPressed: () => setState(() {
+                          _guideScale = (_guideScale + 0.1).clamp(0.3, 2.0);
+                        }),
+                      ),
+                      const SizedBox(width: 8),
+                      TextButton(
+                        onPressed: () => setState(() {
+                          _guideOffset = Offset.zero;
+                          _guideScale = 1.0;
+                        }),
+                        child: const Text('Reset', style: TextStyle(fontSize: 12)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
                 ],
 
                 if (_loading)
@@ -262,25 +416,38 @@ class _CameraPageState extends State<CameraPage> {
 
                 const SizedBox(height: 20),
 
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  alignment: WrapAlignment.center,
-                  children: [
-                    ElevatedButton(
-                      onPressed: _pickFromGallery,
-                      child: const Text('Upload Eyelid Image'),
-                    ),
-                    ElevatedButton(
-                      onPressed: _takePhoto,
-                      child: Text(kIsWeb ? 'Capture (Browser Prompt)' : 'Capture from Camera'),
-                    ),
-                    ElevatedButton(
-                      onPressed: _imageBytes == null || _loading ? null : _submitImage,
-                      child: const Text('Check for Anemia'),
-                    ),
-                  ],
-                ),
+                // Only show capture buttons after dismissing instructions
+                if (!_showInstructions || _imageBytes != null)
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    alignment: WrapAlignment.center,
+                    children: [
+                      ElevatedButton.icon(
+                        onPressed: _pickFromGallery,
+                        icon: const Icon(Icons.photo_library),
+                        label: const Text('Upload Image'),
+                      ),
+                      ElevatedButton.icon(
+                        onPressed: _takePhoto,
+                        icon: const Icon(Icons.camera_alt),
+                        label: Text(kIsWeb ? 'Capture' : 'Take Photo'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.teal,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                      ElevatedButton.icon(
+                        onPressed: _imageBytes == null || _loading ? null : _submitImage,
+                        icon: const Icon(Icons.science),
+                        label: const Text('Analyze'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.deepPurple,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
 
                 const SizedBox(height: 30),
 
