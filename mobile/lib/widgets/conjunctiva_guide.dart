@@ -2,8 +2,8 @@
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
 
-/// A crescent-shaped overlay guide for positioning the conjunctiva.
-/// Used both as a static instruction and as a camera overlay.
+/// A horizontal crescent guide (like a smile) for positioning the conjunctiva.
+/// Has 4 draggable control points that can be adjusted by touch.
 class ConjunctivaGuide extends StatelessWidget {
   final double width;
   final double height;
@@ -11,7 +11,6 @@ class ConjunctivaGuide extends StatelessWidget {
   final double strokeWidth;
   final bool showInstructions;
   final bool animated;
-
   const ConjunctivaGuide({
     super.key,
     this.width = 280,
@@ -30,10 +29,10 @@ class ConjunctivaGuide extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // The crescent guide
+          // Simple static crescent for instruction display
           CustomPaint(
             size: Size(width, height),
-            painter: _CrescentPainter(
+            painter: _SimpleCrescentPainter(
               color: guideColor,
               strokeWidth: strokeWidth,
             ),
@@ -56,12 +55,253 @@ class ConjunctivaGuide extends StatelessWidget {
   }
 }
 
-/// Custom painter for the crescent shape
-class _CrescentPainter extends CustomPainter {
+/// Interactive crescent with 4 draggable control points
+class DraggableCrescentGuide extends StatefulWidget {
+  final double width;
+  final double height;
+  final Color guideColor;
+  final double strokeWidth;
+  
+  // Callback when user drags the center to move the whole crescent
+  final Function(Offset delta)? onMove;
+  
+  // Callback when shape changes
+  final Function(Offset left, Offset right, Offset top, Offset bottom)? onShapeChanged;
+
+  const DraggableCrescentGuide({
+    super.key,
+    this.width = 150,
+    this.height = 80,
+    this.guideColor = Colors.lightGreenAccent,
+    this.strokeWidth = 3.0,
+    this.onMove,
+    this.onShapeChanged,
+  });
+  
+  @override
+  State<DraggableCrescentGuide> createState() => DraggableCrescentGuideState();
+}
+
+// Made public so it can be accessed via GlobalKey for reset
+class DraggableCrescentGuideState extends State<DraggableCrescentGuide> {
+  // Padding added to widget to ensure touch areas stay inside hit test bounds
+  static const double _padding = 35.0;
+  
+  /// Call this to reset the crescent to its default shape
+  void resetShape() {
+    setState(() {
+      _initializeRatios();
+    });
+  }
+  
+  // Control points stored as RATIOS (0-1) of the INNER area (excluding padding)
+  late double _leftX, _leftY;
+  late double _rightX, _rightY;
+  late double _topX, _topY;
+  late double _bottomX, _bottomY;
+  
+  // Track which point is being dragged (null = none, -1 = center/move)
+  int? _draggingPoint;
+  
+  // Inner area dimensions (widget size minus padding)
+  double get _innerWidth => widget.width;
+  double get _innerHeight => widget.height;
+  
+  // Convert ratio to actual position (with padding offset)
+  Offset _getPosition(int index) {
+    double x, y;
+    switch (index) {
+      case 0: x = _leftX; y = _leftY; break;
+      case 1: x = _rightX; y = _rightY; break;
+      case 2: x = _topX; y = _topY; break;
+      case 3: x = _bottomX; y = _bottomY; break;
+      default: return Offset.zero;
+    }
+    return Offset(
+      _padding + x * _innerWidth,
+      _padding + y * _innerHeight,
+    );
+  }
+  
+  @override
+  void initState() {
+    super.initState();
+    _initializeRatios();
+  }
+  
+  void _initializeRatios() {
+    // Default crescent shape as ratios (0-1)
+    _leftX = 0.0; _leftY = 0.5;
+    _rightX = 1.0; _rightY = 0.5;
+    _topX = 0.5; _topY = 0.2;
+    _bottomX = 0.5; _bottomY = 0.9;
+  }
+  
+  // Update a point from screen position (accounting for padding)
+  void _updatePointFromScreenPos(int index, Offset screenPos) {
+    // Convert screen position to ratio (subtract padding, divide by inner size)
+    final rawX = (screenPos.dx - _padding) / _innerWidth;
+    final rawY = (screenPos.dy - _padding) / _innerHeight;
+    
+    // Keep points within reasonable bounds (staying inside the widget visually)
+    // Allow movement within the padded area (-0.2 to 1.2 means 20% outside inner area,
+    // but still inside the total widget bounds with 35px padding)
+    double x, y;
+    if (index == 0 || index == 1) {
+      // L and R: tighter X limits, moderate Y
+      x = rawX.clamp(-0.1, 1.1);
+      y = rawY.clamp(-0.3, 1.3);
+    } else {
+      // T and B: moderate X, wider Y but stay in bounds
+      x = rawX.clamp(-0.2, 1.2);
+      y = rawY.clamp(-0.35, 1.35); // Stay within padded bounds
+    }
+    
+    setState(() {
+      switch (index) {
+        case 0: _leftX = x; _leftY = y; break;
+        case 1: _rightX = x; _rightY = y; break;
+        case 2: _topX = x; _topY = y; break;
+        case 3: _bottomX = x; _bottomY = y; break;
+      }
+    });
+  }
+  
+  void _notifyChange() {
+    // Report positions without padding for external use
+    widget.onShapeChanged?.call(
+      Offset(_leftX * _innerWidth, _leftY * _innerHeight),
+      Offset(_rightX * _innerWidth, _rightY * _innerHeight),
+      Offset(_topX * _innerWidth, _topY * _innerHeight),
+      Offset(_bottomX * _innerWidth, _bottomY * _innerHeight),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Total size includes padding for touch areas
+    final totalWidth = widget.width + _padding * 2;
+    final totalHeight = widget.height + _padding * 2;
+    
+    // Get current positions (with padding)
+    final left = _getPosition(0);
+    final right = _getPosition(1);
+    final top = _getPosition(2);
+    final bottom = _getPosition(3);
+    
+    return SizedBox(
+      width: totalWidth,
+      height: totalHeight,
+      child: Stack(
+        children: [
+          // The crescent shape (offset by padding)
+          Positioned(
+            left: _padding,
+            top: _padding,
+            width: _innerWidth,
+            height: _innerHeight,
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onPanStart: (_) => _draggingPoint = -1,
+              onPanUpdate: (details) {
+                if (_draggingPoint == -1) {
+                  widget.onMove?.call(details.delta);
+                }
+              },
+              onPanEnd: (_) => _draggingPoint = null,
+              child: CustomPaint(
+                size: Size(_innerWidth, _innerHeight),
+                painter: _DraggableCrescentPainter(
+                  color: widget.guideColor,
+                  strokeWidth: widget.strokeWidth,
+                  leftPoint: Offset(_leftX * _innerWidth, _leftY * _innerHeight),
+                  rightPoint: Offset(_rightX * _innerWidth, _rightY * _innerHeight),
+                  topControl: Offset(_topX * _innerWidth, _topY * _innerHeight),
+                  bottomControl: Offset(_bottomX * _innerWidth, _bottomY * _innerHeight),
+                ),
+              ),
+            ),
+          ),
+          
+          // Control points - positioned within the padded area so hit testing works
+          _buildControlPoint(0, left, 'L'),
+          _buildControlPoint(1, right, 'R'),
+          _buildControlPoint(2, top, 'T'),
+          _buildControlPoint(3, bottom, 'B'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildControlPoint(int index, Offset position, String label) {
+    const double visualSize = 26;
+    const double touchSize = 56;
+    
+    return Positioned(
+      left: position.dx - touchSize / 2,
+      top: position.dy - touchSize / 2,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onPanStart: (_) {
+          _draggingPoint = index;
+        },
+        onPanUpdate: (details) {
+          if (_draggingPoint != index) return;
+          // Get current position and add delta
+          final currentPos = _getPosition(index);
+          _updatePointFromScreenPos(index, currentPos + details.delta);
+          _notifyChange();
+        },
+        onPanEnd: (_) => _draggingPoint = null,
+        onPanCancel: () => _draggingPoint = null,
+        child: Container(
+          width: touchSize,
+          height: touchSize,
+          color: Colors.transparent,
+          alignment: Alignment.center,
+          child: Container(
+            width: visualSize,
+            height: visualSize,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: _draggingPoint == index ? Colors.yellow : widget.guideColor,
+                width: 3,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: _draggingPoint == index 
+                      ? Colors.yellow.withOpacity(0.8)
+                      : Colors.black.withOpacity(0.5),
+                  blurRadius: _draggingPoint == index ? 12 : 6,
+                  spreadRadius: _draggingPoint == index ? 4 : 2,
+                ),
+              ],
+            ),
+            child: Center(
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: _draggingPoint == index ? Colors.black : widget.guideColor,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Simple static crescent painter (horizontal smile shape)
+class _SimpleCrescentPainter extends CustomPainter {
   final Color color;
   final double strokeWidth;
 
-  _CrescentPainter({
+  _SimpleCrescentPainter({
     required this.color,
     required this.strokeWidth,
   });
@@ -69,81 +309,105 @@ class _CrescentPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = color.withOpacity(0.8)
+      ..color = color.withOpacity(0.9)
       ..style = PaintingStyle.stroke
       ..strokeWidth = strokeWidth
       ..strokeCap = StrokeCap.round;
 
     final fillPaint = Paint()
-      ..color = color.withOpacity(0.1)
+      ..color = color.withOpacity(0.15)
       ..style = PaintingStyle.fill;
 
-    // Create crescent path
+    // Horizontal crescent (like a smile)
     final path = Path();
     
-    // Outer arc (bottom of crescent)
-    final outerRect = Rect.fromLTWH(
-      size.width * 0.05,
-      size.height * 0.1,
-      size.width * 0.9,
-      size.height * 1.2,
-    );
-    path.addArc(outerRect, math.pi * 0.15, math.pi * 0.7);
+    final leftPoint = Offset(0, size.height * 0.4);
+    final rightPoint = Offset(size.width, size.height * 0.4);
+    final topControl = Offset(size.width * 0.5, size.height * 0.1);
+    final bottomControl = Offset(size.width * 0.5, size.height * 0.9);
     
-    // Inner arc (top of crescent) - creates the crescent shape
-    final innerRect = Rect.fromLTWH(
-      size.width * 0.1,
-      size.height * 0.25,
-      size.width * 0.8,
-      size.height * 0.9,
-    );
-    path.arcTo(innerRect, math.pi * 0.85, -math.pi * 0.7, false);
+    // Start at left tip
+    path.moveTo(leftPoint.dx, leftPoint.dy);
+    
+    // Top curve (inner, flatter)
+    path.quadraticBezierTo(topControl.dx, topControl.dy, rightPoint.dx, rightPoint.dy);
+    
+    // Bottom curve (outer, more curved)
+    path.quadraticBezierTo(bottomControl.dx, bottomControl.dy, leftPoint.dx, leftPoint.dy);
     
     path.close();
 
-    // Draw fill first, then stroke
     canvas.drawPath(path, fillPaint);
     canvas.drawPath(path, paint);
-
-    // Draw corner markers for alignment
-    _drawCornerMarkers(canvas, size, paint);
-  }
-
-  void _drawCornerMarkers(Canvas canvas, Size size, Paint paint) {
-    final markerPaint = Paint()
-      ..color = color.withOpacity(0.6)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
-
-    const markerSize = 15.0;
-    
-    // Top-left corner
-    canvas.drawLine(
-      Offset(0, markerSize),
-      const Offset(0, 0),
-      markerPaint,
-    );
-    canvas.drawLine(
-      const Offset(0, 0),
-      Offset(markerSize, 0),
-      markerPaint,
-    );
-    
-    // Top-right corner
-    canvas.drawLine(
-      Offset(size.width - markerSize, 0),
-      Offset(size.width, 0),
-      markerPaint,
-    );
-    canvas.drawLine(
-      Offset(size.width, 0),
-      Offset(size.width, markerSize),
-      markerPaint,
-    );
   }
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+/// Crescent painter with 4 custom control points
+class _DraggableCrescentPainter extends CustomPainter {
+  final Color color;
+  final double strokeWidth;
+  final Offset leftPoint;
+  final Offset rightPoint;
+  final Offset topControl;
+  final Offset bottomControl;
+
+  _DraggableCrescentPainter({
+    required this.color,
+    required this.strokeWidth,
+    required this.leftPoint,
+    required this.rightPoint,
+    required this.topControl,
+    required this.bottomControl,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color.withOpacity(0.95)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.round;
+
+    final fillPaint = Paint()
+      ..color = color.withOpacity(0.2)
+      ..style = PaintingStyle.fill;
+
+    // Draw crescent using the 4 control points
+    final path = Path();
+    
+    // Start at left tip
+    path.moveTo(leftPoint.dx, leftPoint.dy);
+    
+    // Top curve (inner) - from left to right via top control
+    path.quadraticBezierTo(topControl.dx, topControl.dy, rightPoint.dx, rightPoint.dy);
+    
+    // Bottom curve (outer) - from right back to left via bottom control
+    path.quadraticBezierTo(bottomControl.dx, bottomControl.dy, leftPoint.dx, leftPoint.dy);
+    
+    path.close();
+
+    // Draw fill then stroke
+    canvas.drawPath(path, fillPaint);
+    canvas.drawPath(path, paint);
+    
+    // Draw small dots at the tips
+    final tipPaint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(leftPoint, strokeWidth * 1.5, tipPaint);
+    canvas.drawCircle(rightPoint, strokeWidth * 1.5, tipPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _DraggableCrescentPainter oldDelegate) {
+    return oldDelegate.leftPoint != leftPoint ||
+           oldDelegate.rightPoint != rightPoint ||
+           oldDelegate.topControl != topControl ||
+           oldDelegate.bottomControl != bottomControl;
+  }
 }
 
 /// A full-screen camera overlay with the crescent guide

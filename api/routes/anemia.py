@@ -58,13 +58,16 @@ _backbone = "unknown"
 _model_tag = "anemia"
 
 # -------- Transforms --------
-def _make_transform():
-    # SimpleCNN was trained WITHOUT normalization - just Resize + ToTensor
-    return T.Compose([
+def _make_transform(backbone: str):
+    """Build transform based on model architecture."""
+    base = [
         T.Resize((IMG_SIZE, IMG_SIZE)),
         T.ToTensor(),
-        # NO normalization for SimpleCNN! It was trained without it.
-    ])
+    ]
+    # ResNet/MobileNet use ImageNet normalization; SimpleCNN does not
+    if backbone in ("resnet18", "resnet34", "resnet50", "mobilenetv3_small", "mobilenetv3_large"):
+        base.append(T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]))
+    return T.Compose(base)
 
 # -------- Checkpoint helpers (arch inference for ANEMIA_ARCH=auto) --------
 def _extract_state_dict(obj):
@@ -124,8 +127,8 @@ def _load_classifier_strict():
         pass
 
     _classifier = model
-    _xform = _make_transform()
     _backbone = arch
+    _xform = _make_transform(_backbone)
     _model_tag = os.path.basename(ckpt_path) or arch
     print(f"[ISHI] Classifier ready: tag={_model_tag} arch={_backbone} classes={_classes}")
     return _classifier, _xform
@@ -147,9 +150,13 @@ def _predict_p_anemic(pil_img: Image.Image) -> float:
     with torch.no_grad():
         logits = model(x)
         probs = torch.softmax(logits, dim=1).cpu().numpy()[0]
-    # SimpleCNN: class 0 = not anemic, class 1 = anemic
-    # So probs[1] is probability of anemic
-    return float(probs[1])
+    # SimpleCNN: class 0 = not anemic, class 1 = anemic → use probs[1]
+    # ResNet/MobileNet: class order from checkpoint metadata
+    if _backbone == "simple_cnn":
+        return float(probs[1])
+    else:
+        idx_anemic = _classes.index("anemic") if "anemic" in _classes else 0
+        return float(probs[idx_anemic])
 
 def _env_true(x: str) -> bool:
     return str(x).lower() in ("1", "true", "yes", "y", "on")

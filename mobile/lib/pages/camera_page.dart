@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'package:intl/intl.dart';
+import 'package:image/image.dart' as img;
 
 // Import the new conjunctiva guide widget
 import '../widgets/conjunctiva_guide.dart';
@@ -35,6 +36,7 @@ class CameraPage extends StatefulWidget {
 
 class _CameraPageState extends State<CameraPage> {
   final _picker = ImagePicker();
+  final _imageContainerKey = GlobalKey();
 
   Uint8List? _imageBytes;
   String? _result;
@@ -44,9 +46,19 @@ class _CameraPageState extends State<CameraPage> {
   bool _showInstructions = true; // Show guide before camera
   
   // For adjustable guide overlay
-  Offset _guideOffset = Offset.zero;
+  Offset _guideOffset = const Offset(80, 120);
   double _guideScale = 1.0;
-  double _baseScale = 1.0; // For tracking scale at gesture start
+  final GlobalKey<DraggableCrescentGuideState> _crescentKey = GlobalKey();
+  
+  // For image zoom/pan
+  final TransformationController _transformController = TransformationController();
+  double _imageScale = 1.0;
+  
+  // Track if user is touching the image area (to disable page scroll)
+  bool _touchingImageArea = false;
+  
+  // Container dimensions for crop calculation
+  Size _containerSize = Size.zero;
 
   Uri? get _apiBaseUri {
     if (_apiBase.isEmpty) return null;
@@ -57,6 +69,11 @@ class _CameraPageState extends State<CameraPage> {
   Uri? _predictUri() => _apiBaseUri == null ? null : _joinPath(_apiBaseUri!, '/predict');
   Uri? _healthUri() => _apiBaseUri == null ? null : _joinPath(_apiBaseUri!, '/health');
 
+  void _resetImageTransform() {
+    _transformController.value = Matrix4.identity();
+    _imageScale = 1.0;
+  }
+
   Future<void> _pickFromGallery() async {
     final x = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 95);
     if (x == null) return;
@@ -66,8 +83,9 @@ class _CameraPageState extends State<CameraPage> {
       _result = null;
       _detail = null;
       // Reset guide position for new image
-      _guideOffset = const Offset(100, 100);
+      _guideOffset = const Offset(80, 120);
       _guideScale = 1.0;
+      _resetImageTransform();
     });
   }
 
@@ -81,9 +99,124 @@ class _CameraPageState extends State<CameraPage> {
       _result = null;
       _detail = null;
       // Reset guide position for new image
-      _guideOffset = const Offset(100, 100);
+      _guideOffset = const Offset(80, 120);
       _guideScale = 1.0;
+      _resetImageTransform();
     });
+  }
+
+  /// Crop the image based on guide position and return cropped bytes
+  /// Accounts for image zoom/pan via InteractiveViewer
+  Future<Uint8List?> _cropImageToGuide() async {
+    if (_imageBytes == null) {
+      debugPrint('[CROP] No image bytes');
+      return null;
+    }
+    
+    try {
+      // Decode the original image
+      final decoded = img.decodeImage(_imageBytes!);
+      if (decoded == null) {
+        debugPrint('[CROP] Failed to decode image');
+        return null;
+      }
+      
+      final origW = decoded.width.toDouble();
+      final origH = decoded.height.toDouble();
+      debugPrint('[CROP] Original image: ${origW.toInt()}x${origH.toInt()}');
+      
+      // Get container size
+      final containerBox = _imageContainerKey.currentContext?.findRenderObject() as RenderBox?;
+      if (containerBox == null) {
+        debugPrint('[CROP] Container not found, sending full image');
+        return null;
+      }
+      final containerW = containerBox.size.width;
+      final containerH = containerBox.size.height;
+      debugPrint('[CROP] Container: ${containerW.toInt()}x${containerH.toInt()}');
+      
+      // Get transformation from InteractiveViewer
+      final matrix = _transformController.value;
+      final txTranslateX = matrix.getTranslation().x;
+      final txTranslateY = matrix.getTranslation().y;
+      final txScale = matrix.getMaxScaleOnAxis();
+      debugPrint('[CROP] Transform: scale=$txScale, tx=$txTranslateX, ty=$txTranslateY');
+      
+      // Calculate base displayed image size (before zoom) using BoxFit.contain
+      final containerAspect = containerW / containerH;
+      final imageAspect = origW / origH;
+      
+      double baseDisplayedW, baseDisplayedH, baseOffsetX, baseOffsetY;
+      if (imageAspect > containerAspect) {
+        baseDisplayedW = containerW;
+        baseDisplayedH = containerW / imageAspect;
+        baseOffsetX = 0;
+        baseOffsetY = (containerH - baseDisplayedH) / 2;
+      } else {
+        baseDisplayedH = containerH;
+        baseDisplayedW = containerH * imageAspect;
+        baseOffsetX = (containerW - baseDisplayedW) / 2;
+        baseOffsetY = 0;
+      }
+      
+      // After zoom, the displayed image size changes
+      final zoomedDisplayW = baseDisplayedW * txScale;
+      final zoomedDisplayH = baseDisplayedH * txScale;
+      
+      // The image's top-left corner in container coordinates after transform
+      // InteractiveViewer centers the scaled content, so we need to account for that
+      final zoomedOffsetX = baseOffsetX * txScale + txTranslateX + (containerW - zoomedDisplayW) / 2 * (txScale - 1) / txScale;
+      final zoomedOffsetY = baseOffsetY * txScale + txTranslateY + (containerH - zoomedDisplayH) / 2 * (txScale - 1) / txScale;
+      
+      debugPrint('[CROP] Base displayed: ${baseDisplayedW.toInt()}x${baseDisplayedH.toInt()}');
+      debugPrint('[CROP] Zoomed displayed: ${zoomedDisplayW.toInt()}x${zoomedDisplayH.toInt()}');
+      
+      // Guide dimensions in container coordinates (horizontal crescent shape)
+      final guideW = 160 * _guideScale;
+      final guideH = 90 * _guideScale;
+      debugPrint('[CROP] Guide: ${guideW.toInt()}x${guideH.toInt()} at (${_guideOffset.dx.toInt()}, ${_guideOffset.dy.toInt()})');
+      
+      // Convert guide position from container coords to original image coords
+      // First, find where the guide is relative to the zoomed image
+      final guideInZoomedX = _guideOffset.dx - (txTranslateX + baseOffsetX);
+      final guideInZoomedY = _guideOffset.dy - (txTranslateY + baseOffsetY);
+      
+      // Then scale back to original image coordinates
+      final scaleToOrig = origW / (baseDisplayedW * txScale);
+      
+      // Add padding around the guide for better context (15% padding)
+      const padFactor = 0.15;
+      final padX = guideW * padFactor;
+      final padY = guideH * padFactor;
+      
+      int cropX = ((guideInZoomedX - padX) * scaleToOrig).round().clamp(0, decoded.width - 1);
+      int cropY = ((guideInZoomedY - padY) * scaleToOrig).round().clamp(0, decoded.height - 1);
+      int cropW = ((guideW + 2 * padX) * scaleToOrig).round();
+      int cropH = ((guideH + 2 * padY) * scaleToOrig).round();
+      
+      // Clamp to image bounds
+      if (cropX + cropW > decoded.width) cropW = decoded.width - cropX;
+      if (cropY + cropH > decoded.height) cropH = decoded.height - cropY;
+      
+      // Ensure minimum size
+      cropW = cropW.clamp(50, decoded.width - cropX);
+      cropH = cropH.clamp(50, decoded.height - cropY);
+      
+      debugPrint('[CROP] Crop rect: x=$cropX, y=$cropY, w=$cropW, h=$cropH');
+      
+      // Perform the crop
+      final cropped = img.copyCrop(decoded, x: cropX, y: cropY, width: cropW, height: cropH);
+      debugPrint('[CROP] Cropped to: ${cropped.width}x${cropped.height}');
+      
+      // Encode back to JPEG
+      final result = Uint8List.fromList(img.encodeJpg(cropped, quality: 95));
+      debugPrint('[CROP] Encoded: ${result.length} bytes');
+      return result;
+    } catch (e, stack) {
+      debugPrint('[CROP] Error: $e');
+      debugPrint('[CROP] Stack: $stack');
+      return null;
+    }
   }
 
   Future<void> _submitImage() async {
@@ -100,10 +233,14 @@ class _CameraPageState extends State<CameraPage> {
     setState(() => _loading = true);
 
     try {
+      // Crop the image based on guide position
+      final croppedBytes = await _cropImageToGuide();
+      final bytesToSend = croppedBytes ?? _imageBytes!;
+      
       final req = http.MultipartRequest('POST', uri)
         ..files.add(http.MultipartFile.fromBytes(
           'image', // server expects "image"
-          _imageBytes!,
+          bytesToSend,
           filename: 'upload.jpg',
           contentType: MediaType('image', 'jpeg'),
         ));
@@ -116,7 +253,7 @@ class _CameraPageState extends State<CameraPage> {
         final isAnemic = m['anemic'] == true;
         final score = (m['score'] is num) ? (m['score'] as num).toDouble() : 0.0;
         final pct = (score * 100).toStringAsFixed(1);
-        final cropper = (m['cropper'] ?? 'n/a').toString();
+        final cropper = croppedBytes != null ? 'manual_crop' : (m['cropper'] ?? 'n/a').toString();
 
         final resultText = isAnemic ? 'Anemic' : 'Not Anemic';
         final detailText = 'Score: $pct% • Cropper: $cropper';
@@ -138,9 +275,11 @@ class _CameraPageState extends State<CameraPage> {
           _detail = body;
         });
       }
-    } catch (e) {
+    } catch (e, stack) {
+      debugPrint('[SUBMIT] Error: $e');
+      debugPrint('[SUBMIT] Stack: $stack');
       setState(() {
-        _result = 'Network error';
+        _result = 'Error';
         _detail = e.toString();
       });
     } finally {
@@ -191,6 +330,12 @@ class _CameraPageState extends State<CameraPage> {
     _loadHistory();
   }
 
+  @override
+  void dispose() {
+    _transformController.dispose();
+    super.dispose();
+  }
+
   void _dismissInstructions() {
     setState(() {
       _showInstructions = false;
@@ -223,6 +368,10 @@ class _CameraPageState extends State<CameraPage> {
         ],
       ),
       body: SingleChildScrollView(
+        // Disable scrolling when user is touching the image area
+        physics: _touchingImageArea 
+            ? const NeverScrollableScrollPhysics() 
+            : const AlwaysScrollableScrollPhysics(),
         child: Center(
           child: Padding(
             padding: const EdgeInsets.all(20),
@@ -292,99 +441,130 @@ class _CameraPageState extends State<CameraPage> {
                 ],
 
                 if (_imageBytes != null) ...[
-                  const Text('Adjust Image & Position Guide:', 
+                  const Text('Position Crescent Over Conjunctiva:', 
                     style: TextStyle(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 4),
                   const Text(
-                    'Pinch to zoom image • Drag green guide to align',
-                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                    '2 fingers = zoom • Drag L/R/T/B to shape • Drag center to move',
+                    style: TextStyle(fontSize: 11, color: Colors.grey),
                   ),
                   const SizedBox(height: 10),
                   
-                  // Interactive image with draggable guide
-                  Container(
-                    height: 300,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.grey.shade300),
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: Stack(
-                        children: [
-                          // Zoomable/pannable image
-                          InteractiveViewer(
-                            minScale: 0.5,
-                            maxScale: 4.0,
-                            child: Image.memory(
-                              _imageBytes!,
-                              fit: BoxFit.contain,
-                            ),
-                          ),
-                          
-                          // Draggable & scalable guide overlay
-                          Positioned(
-                            left: _guideOffset.dx,
-                            top: _guideOffset.dy,
-                            child: GestureDetector(
-                              onScaleStart: (_) {
-                                _baseScale = _guideScale;
-                              },
-                              onScaleUpdate: (details) {
-                                setState(() {
-                                  // Handle drag (focal point delta)
-                                  _guideOffset += details.focalPointDelta;
-                                  // Handle pinch scale
-                                  _guideScale = (_baseScale * details.scale).clamp(0.3, 2.0);
-                                });
-                              },
-                              child: Opacity(
-                                opacity: 0.7,
-                                child: ConjunctivaGuide(
-                                  width: 120 * _guideScale,
-                                  height: 50 * _guideScale,
-                                  guideColor: Colors.green,
-                                  showInstructions: false,
+                  // Listener detects touch to disable page scroll
+                  Listener(
+                    onPointerDown: (_) => setState(() => _touchingImageArea = true),
+                    onPointerUp: (_) => setState(() => _touchingImageArea = false),
+                    onPointerCancel: (_) => setState(() => _touchingImageArea = false),
+                    child: Container(
+                      key: _imageContainerKey,
+                      height: 400,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.teal.shade300, width: 2),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: Stack(
+                          children: [
+                            // Zoomable/pannable image
+                            Positioned.fill(
+                              child: InteractiveViewer(
+                                transformationController: _transformController,
+                                minScale: 1.0,
+                                maxScale: 6.0,
+                                panEnabled: true,
+                                scaleEnabled: true,
+                                onInteractionUpdate: (details) {
+                                  setState(() {
+                                    _imageScale = _transformController.value.getMaxScaleOnAxis();
+                                  });
+                                },
+                                child: Image.memory(
+                                  _imageBytes!,
+                                  fit: BoxFit.contain,
                                 ),
                               ),
                             ),
+                            
+                            // Draggable crescent guide with 4 control points
+                            // Note: DraggableCrescentGuide adds 35px padding internally
+                            Positioned(
+                              left: _guideOffset.dx - 35, // Offset for internal padding
+                              top: _guideOffset.dy - 35,
+                              child: DraggableCrescentGuide(
+                                key: _crescentKey, // Key for reset functionality
+                                width: 160 * _guideScale,
+                                height: 90 * _guideScale,
+                                guideColor: Colors.lightGreenAccent,
+                                strokeWidth: 3.0 * _guideScale,
+                                onMove: (delta) {
+                                  setState(() {
+                                    _guideOffset += delta;
+                                    _guideOffset = Offset(
+                                      _guideOffset.dx.clamp(0, 250),
+                                      _guideOffset.dy.clamp(0, 300),
+                                    );
+                                  });
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ), // End Listener
+                  
+                  // Zoom and size controls
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade200,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text('Zoom: ${(_imageScale * 100).toInt()}%',
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+                      ),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text('Crescent:', style: TextStyle(fontSize: 12)),
+                          IconButton(
+                            icon: const Icon(Icons.remove, size: 20),
+                            onPressed: () => setState(() => _guideScale = (_guideScale - 0.15).clamp(0.4, 2.5)),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(minWidth: 36),
+                          ),
+                          Text('${(_guideScale * 100).toInt()}%', style: const TextStyle(fontSize: 12)),
+                          IconButton(
+                            icon: const Icon(Icons.add, size: 20),
+                            onPressed: () => setState(() => _guideScale = (_guideScale + 0.15).clamp(0.4, 2.5)),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(minWidth: 36),
                           ),
                         ],
                       ),
-                    ),
-                  ),
-                  
-                  // Guide size controls
-                  const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Text('Guide size:', style: TextStyle(fontSize: 12)),
-                      IconButton(
-                        icon: const Icon(Icons.remove_circle_outline, size: 20),
-                        onPressed: () => setState(() {
-                          _guideScale = (_guideScale - 0.1).clamp(0.3, 2.0);
-                        }),
-                      ),
-                      Text('${(_guideScale * 100).toInt()}%', 
-                        style: const TextStyle(fontSize: 12)),
-                      IconButton(
-                        icon: const Icon(Icons.add_circle_outline, size: 20),
-                        onPressed: () => setState(() {
-                          _guideScale = (_guideScale + 0.1).clamp(0.3, 2.0);
-                        }),
-                      ),
-                      const SizedBox(width: 8),
-                      TextButton(
-                        onPressed: () => setState(() {
-                          _guideOffset = Offset.zero;
-                          _guideScale = 1.0;
-                        }),
-                        child: const Text('Reset', style: TextStyle(fontSize: 12)),
-                      ),
                     ],
                   ),
-                  const SizedBox(height: 10),
+                  
+                  // Reset button - resets position, size, shape, and zoom
+                  TextButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _guideOffset = const Offset(80, 120);
+                        _guideScale = 1.0;
+                        _resetImageTransform();
+                      });
+                      // Also reset the crescent shape to default
+                      _crescentKey.currentState?.resetShape();
+                    },
+                    icon: const Icon(Icons.refresh, size: 16),
+                    label: const Text('Reset All', style: TextStyle(fontSize: 12)),
+                  ),
+                  const SizedBox(height: 6),
                 ],
 
                 if (_loading)
