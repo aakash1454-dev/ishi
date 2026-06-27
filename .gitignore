@@ -44,3 +44,9 @@ mobile/android/ishi-upload.jks
 mobile/android/key.properties
 *.keystore
 *.jks
+
+
+# derived crop set (regenerate via scripts/build_crops_manifest.py)
+data/crops/
+# local undo-net for normalize_masks.py (raw originals are in git history)
+data/rescue_italy_1_31/

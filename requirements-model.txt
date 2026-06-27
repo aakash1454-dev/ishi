@@ -1,0 +1,28 @@
+# Lean dev environment for the model-architecture exploration work
+# (subset of requirements_dev.txt + timm; excludes GUI/annotation/Jupyter tooling).
+#
+# Torch is installed SEPARATELY from the PyTorch wheel index (NOT pinned here).
+#   GPU (this dev machine, RTX 4060 / CUDA 12.x) -- used for training/benchmark:
+#     uv pip install --index-url https://download.pytorch.org/whl/cu121 torch==2.2.2 torchvision==0.17.2
+#   CPU (deployment target) -- weights are device-agnostic, load fine on CPU:
+#     uv pip install --index-url https://download.pytorch.org/whl/cpu  torch==2.2.2 torchvision==0.17.2
+# Then:
+#   uv pip install -r requirements-model.txt
+
+# Core numerics / imaging (pinned to match the project)
+numpy==1.26.4
+pillow==10.4.0
+opencv-python-headless==4.9.0.80
+
+# ML / evaluation
+scikit-learn==1.7.0
+scikit-image==0.25.2
+pandas==2.3.1
+matplotlib==3.10.3
+seaborn==0.13.2
+tqdm==4.67.1
+
+# Backbones (DINOv2 / ConvNeXt / EfficientNetV2 / ViT), TTA, explainability
+timm
+ttach==0.0.3
+grad-cam==1.5.5
