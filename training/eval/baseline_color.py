@@ -65,12 +65,23 @@ def load_folds(path):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--out", default="runs/eval/baseline_color")
+    ap.add_argument("--out", default=None)
     ap.add_argument("--folds", default=str(FOLDS))
+    ap.add_argument("--country", choices=["all", "India", "Italy"], default="all",
+                    help="restrict BOTH train and test to one population. Tests whether "
+                         "the hand-built colour signal survives inside a single site.")
     ap.add_argument("--seed", type=int, default=42)
     args = ap.parse_args()
 
+    if args.out is None:
+        tag = "" if args.country == "all" else f"_{args.country}"
+        args.out = f"runs/eval/baseline_color{tag}"
+
     rows = load_folds(args.folds)
+    if args.country != "all":
+        rows = [r for r in rows if r["country"] == args.country]
+        print(f"PER-POPULATION colour baseline: {args.country} only "
+              f"({len(rows)} subjects, {sum(r['y'] for r in rows)} anemic)")
     n_folds = max(r["fold"] for r in rows) + 1
     print(f"extracting colour features for {len(rows)} crops ...")
     X = np.stack([features(CROPS / r["image"]) for r in rows])

@@ -1,0 +1,23 @@
+{
+  "model": "convnext_tiny_legacy",
+  "backbone": "convnext_tiny",
+  "recipe": "legacy",
+  "folds": "data/folds_balanced.csv",
+  "tta": true,
+  "finetune": "partial",
+  "freeze_frac": 0.5,
+  "lr_head": 0.001,
+  "epochs": 20,
+  "bs": 32,
+  "lr": 0.0001,
+  "wd": 0.0001,
+  "label_smoothing": 0.0,
+  "cosine_lr": false,
+  "img_size": 224,
+  "seed": 43,
+  "n_folds": 5,
+  "pretrained": true,
+  "selection": "fixed-epochs (no held-fold peeking)",
+  "git_commit": "36ae2a7",
+  "written_at": "2026-07-21 15:41:08"
+}

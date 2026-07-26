@@ -1,0 +1,41 @@
+{
+  "model": "loco_resnet18_legacy",
+  "directions": {
+    "train_Italy_test_India": {
+      "threshold": 0.5,
+      "n": 95,
+      "n_anemic": 68,
+      "sensitivity": 0.04411764705882353,
+      "specificity": 1.0,
+      "f1": 0.08450704225352113,
+      "precision": 1.0,
+      "recall": 0.04411764705882353,
+      "confusion": {
+        "tn": 27,
+        "fp": 0,
+        "fn": 65,
+        "tp": 3
+      },
+      "auroc": 0.6982570806100218,
+      "auprc": 0.8499104942414548
+    },
+    "train_India_test_Italy": {
+      "threshold": 0.5,
+      "n": 122,
+      "n_anemic": 23,
+      "sensitivity": 1.0,
+      "specificity": 0.20202020202020202,
+      "f1": 0.368,
+      "precision": 0.22549019607843138,
+      "recall": 1.0,
+      "confusion": {
+        "tn": 20,
+        "fp": 79,
+        "fn": 0,
+        "tp": 23
+      },
+      "auroc": 0.8348704435660957,
+      "auprc": 0.6543579692245574
+    }
+  }
+}

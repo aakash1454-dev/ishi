@@ -1,0 +1,135 @@
+{
+  "model": "convnext_tiny_colorhygiene_nowb",
+  "oof": {
+    "threshold": 0.5,
+    "n": 217,
+    "n_anemic": 91,
+    "sensitivity": 0.34065934065934067,
+    "specificity": 0.7777777777777778,
+    "f1": 0.41333333333333333,
+    "precision": 0.5254237288135594,
+    "recall": 0.34065934065934067,
+    "confusion": {
+      "tn": 98,
+      "fp": 28,
+      "fn": 60,
+      "tp": 31
+    },
+    "auroc": 0.6421594278737136,
+    "auprc": 0.5825297228330059
+  },
+  "per_fold_mean_std": {
+    "f1": {
+      "mean": 0.25441176470588234,
+      "std": 0.31166757643472004
+    },
+    "sensitivity": {
+      "mean": 0.3157894736842105,
+      "std": 0.4090391416363252
+    },
+    "specificity": {
+      "mean": 0.7666666666666667,
+      "std": 0.38873012632302
+    },
+    "auroc": {
+      "mean": 0.7842105263157895,
+      "std": 0.107914646671711
+    },
+    "auprc": {
+      "mean": 0.739317707822489,
+      "std": 0.1163000097339607
+    }
+  },
+  "per_fold": [
+    {
+      "threshold": 0.5,
+      "n": 44,
+      "n_anemic": 20,
+      "sensitivity": 1.0,
+      "specificity": 0.0,
+      "f1": 0.625,
+      "precision": 0.45454545454545453,
+      "recall": 1.0,
+      "confusion": {
+        "tn": 0,
+        "fp": 24,
+        "fn": 0,
+        "tp": 20
+      },
+      "auroc": 0.5979166666666667,
+      "auprc": 0.6400551237291026
+    },
+    {
+      "threshold": 0.5,
+      "n": 43,
+      "n_anemic": 16,
+      "sensitivity": 0.0,
+      "specificity": 1.0,
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "confusion": {
+        "tn": 27,
+        "fp": 0,
+        "fn": 16,
+        "tp": 0
+      },
+      "auroc": 0.7361111111111112,
+      "auprc": 0.5607003863467335
+    },
+    {
+      "threshold": 0.5,
+      "n": 43,
+      "n_anemic": 19,
+      "sensitivity": 0.5789473684210527,
+      "specificity": 0.8333333333333334,
+      "f1": 0.6470588235294118,
+      "precision": 0.7333333333333333,
+      "recall": 0.5789473684210527,
+      "confusion": {
+        "tn": 20,
+        "fp": 4,
+        "fn": 8,
+        "tp": 11
+      },
+      "auroc": 0.8793859649122807,
+      "auprc": 0.8343330580323804
+    },
+    {
+      "threshold": 0.5,
+      "n": 43,
+      "n_anemic": 16,
+      "sensitivity": 0.0,
+      "specificity": 1.0,
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "confusion": {
+        "tn": 27,
+        "fp": 0,
+        "fn": 16,
+        "tp": 0
+      },
+      "auroc": 0.8888888888888888,
+      "auprc": 0.8228882551057474
+    },
+    {
+      "threshold": 0.5,
+      "n": 44,
+      "n_anemic": 20,
+      "sensitivity": 0.0,
+      "specificity": 1.0,
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "confusion": {
+        "tn": 24,
+        "fp": 0,
+        "fn": 20,
+        "tp": 0
+      },
+      "auroc": 0.8187500000000001,
+      "auprc": 0.8386117158984807
+    }
+  ]
+}

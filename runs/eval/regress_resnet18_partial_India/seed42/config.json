@@ -1,0 +1,19 @@
+{
+  "model": "resnet18_hb_regression",
+  "target": "hb (g/dL)",
+  "recipe": "legacy",
+  "crops": "rectangle",
+  "preproc": "none",
+  "finetune": "partial",
+  "dropout": 0.0,
+  "epochs": 20,
+  "bs": 32,
+  "lr": 0.0003,
+  "wd": 0.0001,
+  "img_size": 224,
+  "seed": 42,
+  "folds": "data/folds_balanced.csv",
+  "binary_rule": "predicted_hb < WHO cutoff (M 13.0 / F 12.0)",
+  "git_commit": "36ae2a7",
+  "written_at": "2026-07-20 13:06:03"
+}

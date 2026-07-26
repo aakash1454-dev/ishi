@@ -1,0 +1,14 @@
+{
+  "model": "dinov2_s14_linprobe",
+  "backbone": "vit_small_patch14_dinov2.lvd142m",
+  "head": "logreg(frozen-probe)",
+  "C": 1.0,
+  "seed": 42,
+  "n_folds": 5,
+  "feat_dim": 384,
+  "white_balance": false,
+  "train_aug": false,
+  "selection": "frozen features, no held-fold peeking",
+  "git_commit": "36ae2a7",
+  "written_at": "2026-06-27 18:29:22"
+}

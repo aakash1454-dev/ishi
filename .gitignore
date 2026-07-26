@@ -15,11 +15,13 @@ datasets/**/cache/
 !datasets/**/labels.csv
 
 # Runs & intermediates
-runs/
-!runs/eval/
-!runs/eval/*.csv
-!runs/eval/*.png
-!runs/eval/error_sets/*.csv
+runs/*
+# keep evaluation results (nested per-run config/metrics/OOF predictions)
+!runs/eval
+# but never commit large/regenerable artifacts under runs/eval
+runs/eval/_cache/
+runs/eval/**/*.pth
+runs/eval/**/*.pt
 
 # Notebooks & local env
 .ipynb_checkpoints/

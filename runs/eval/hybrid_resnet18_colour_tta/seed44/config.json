@@ -1,0 +1,12 @@
+{
+  "model": "hybrid_resnet18_colour",
+  "recipe": "legacy",
+  "folds": "data/folds_balanced.csv",
+  "finetune": "partial",
+  "tta": true,
+  "epochs": 20,
+  "seed": 44,
+  "fusion": "concat(resnet512, colour20) -> linear",
+  "git_commit": "36ae2a7",
+  "written_at": "2026-07-21 13:37:11"
+}

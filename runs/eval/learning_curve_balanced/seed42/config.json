@@ -1,0 +1,18 @@
+{
+  "model": "learning_curve",
+  "match": "balanced",
+  "sizes": [
+    20,
+    30,
+    40
+  ],
+  "test_country": "India",
+  "recipe": "legacy",
+  "crops": "rectangle",
+  "finetune": "partial",
+  "epochs": 20,
+  "seed": 42,
+  "folds": "data/folds_balanced.csv",
+  "git_commit": "36ae2a7",
+  "written_at": "2026-07-21 00:24:00"
+}

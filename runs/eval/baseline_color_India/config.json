@@ -1,0 +1,9 @@
+{
+  "model": "color_logreg_baseline",
+  "seed": 42,
+  "n_folds": 5,
+  "n_features": 20,
+  "img_size": 160,
+  "git_commit": "36ae2a7",
+  "written_at": "2026-07-21 00:48:35"
+}

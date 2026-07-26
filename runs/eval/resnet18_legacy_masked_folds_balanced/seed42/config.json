@@ -1,0 +1,19 @@
+{
+  "model": "resnet18_legacy",
+  "recipe": "legacy",
+  "crops": "masked",
+  "folds": "data/folds_balanced.csv",
+  "epochs": 20,
+  "bs": 32,
+  "lr": 0.0003,
+  "wd": 0.0001,
+  "label_smoothing": 0.0,
+  "cosine_lr": false,
+  "img_size": 224,
+  "seed": 42,
+  "n_folds": 5,
+  "pretrained": true,
+  "selection": "fixed-epochs (no held-fold peeking)",
+  "git_commit": "36ae2a7",
+  "written_at": "2026-07-19 14:28:48"
+}

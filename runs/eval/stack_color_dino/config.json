@@ -1,0 +1,14 @@
+{
+  "model": "stack_color+dino",
+  "features": "color+dino",
+  "backbone": "vit_small_patch14_dinov2.lvd142m",
+  "n_color": 20,
+  "n_dino": 384,
+  "n_total": 404,
+  "C": 0.2,
+  "seed": 42,
+  "n_folds": 5,
+  "head": "logreg",
+  "git_commit": "36ae2a7",
+  "written_at": "2026-06-27 18:38:35"
+}

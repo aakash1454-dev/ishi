@@ -26,7 +26,18 @@ import numpy as np
 from sklearn.model_selection import StratifiedGroupKFold
 
 MANIFEST = pathlib.Path("data/manifest.csv")
+LABELS = pathlib.Path("datasets/anemia/processed/eyes_defy_anemia/labels.csv")
 OUT = pathlib.Path("data/folds.csv")
+
+
+def load_sex(path=LABELS):
+    """(country, subject_id) -> 'M' | 'F' | '' , from the study labels file."""
+    out = {}
+    if not pathlib.Path(path).exists():
+        return out
+    for r in csv.DictReader(open(path)):
+        out[(r["country"], r["subject_id"])] = r.get("sex", "").strip().upper()
+    return out
 
 
 def load_manifest(path):
@@ -74,14 +85,38 @@ def main():
     ap.add_argument("--out", default=str(OUT))
     ap.add_argument("--folds", type=int, default=5)
     ap.add_argument("--seed", type=int, default=42)
+    ap.add_argument("--stratify", default="label",
+                    help="comma list from {country,sex,label}. 'label' = original "
+                         "behaviour; 'country,sex,label' = the 8-way balanced split.")
     args = ap.parse_args()
+
+    keys = [k.strip() for k in args.stratify.split(",") if k.strip()]
+    assert set(keys) <= {"country", "sex", "label"}, f"bad --stratify: {keys}"
+    use_sex = "sex" in keys
+    sex_of = load_sex() if use_sex else {}
 
     rows = load_manifest(args.manifest)
     for r in rows:
         r["subject"] = f"{r['country']}_{r['subject_id']}"
         r["y"] = 1 if r["label"].strip().lower() == "anemic" else 0
+        r["sex"] = sex_of.get((r["country"], r["subject_id"]), "") if use_sex else ""
+        # composite stratum label used to balance the folds
+        parts = []
+        for k in keys:
+            if k == "country": parts.append(r["country"])
+            elif k == "sex":   parts.append(r["sex"] or "U")   # U = unknown sex
+            elif k == "label": parts.append("anemic" if r["y"] else "non")
+        r["strat"] = "_".join(parts)
 
-    y = np.array([r["y"] for r in rows])
+    if use_sex:
+        miss = [r["subject"] for r in rows if r["sex"] not in ("M", "F")]
+        if miss:
+            print(f"WARNING: {len(miss)} subjects missing sex -> bucket 'U': {miss[:8]}")
+
+    # stratify on the composite label (encoded to ints), still grouped by subject
+    strata = sorted({r["strat"] for r in rows})
+    code = {s: i for i, s in enumerate(strata)}
+    y = np.array([code[r["strat"]] for r in rows])
     groups = np.array([r["subject"] for r in rows])
     X = np.zeros((len(rows), 1))  # unused; StratifiedGroupKFold needs an X
 
@@ -98,13 +133,15 @@ def main():
     rows.sort(key=lambda r: (r["country"], int(r["subject_id"])))
     with open(args.out, "w", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["image", "country", "subject_id", "subject", "label", "y", "fold"])
+        w.writerow(["image", "country", "subject_id", "subject", "sex", "strat",
+                    "label", "y", "fold"])
         for r in rows:
             w.writerow([r["image"], r["country"], r["subject_id"], r["subject"],
-                        r["label"], r["y"], r["fold"]])
+                        r["sex"], r["strat"], r["label"], r["y"], r["fold"]])
 
     # report: per-fold size + anemic rate (want these roughly equal across folds)
-    print(f"leakage self-check PASSED  ({args.folds} folds, seed {args.seed})")
+    print(f"leakage self-check PASSED  ({args.folds} folds, seed {args.seed}, "
+          f"stratify={','.join(keys)})")
     print(f"{len(rows)} subjects -> {args.out}\n")
     print(f"{'fold':>4} {'n':>4} {'anemic':>7} {'nonanemic':>10} {'anemic%':>8}")
     by_fold = collections.defaultdict(list)
@@ -116,6 +153,17 @@ def main():
         print(f"{fold:>4} {n:>4} {a:>7} {n-a:>10} {100*a/n:>7.1f}%")
     tot = len(rows); ta = sum(r["y"] for r in rows)
     print(f"{'all':>4} {tot:>4} {ta:>7} {tot-ta:>10} {100*ta/tot:>7.1f}%")
+
+    # per-stratum spread across folds (the whole point of composite stratification)
+    if len(strata) > 2:
+        print(f"\n{'stratum':28s} " + " ".join(f'f{f}' for f in sorted(by_fold)) + "  total")
+        by_strat = collections.defaultdict(lambda: collections.Counter())
+        for r in rows:
+            by_strat[r["strat"]][r["fold"]] += 1
+        for s in strata:
+            counts = by_strat[s]
+            line = " ".join(f'{counts.get(f,0):>2d}' for f in sorted(by_fold))
+            print(f"  {s:26s} {line}  {sum(counts.values()):>5d}")
 
 
 if __name__ == "__main__":
